@@ -15,6 +15,11 @@
 
   const hasMath = (text) => text.includes('$') || text.includes('\\(') || text.includes('\\[');
 
+  function hasNativeRenderedMath(el) {
+    const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
+    return !wrapper && Boolean(el.querySelector('.katex, .katex-display'));
+  }
+
   // ELM appears to parse Markdown before KaTeX. In math text, that can turn
   // subscript underscores into <em>/<strong> markup and remove the original
   // underscore characters. Clone the DOM and reverse that local Markdown markup
@@ -69,6 +74,11 @@
         continue;
       }
 
+      if (hasNativeRenderedMath(el)) {
+        i++;
+        continue;
+      }
+
       const hiddenOriginal = el.querySelector(':scope > .elm-math-hidden-original');
       const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
       let text = hiddenOriginal ? getMathAwareText(hiddenOriginal) : getMathAwareText(el);
@@ -90,6 +100,10 @@
           if (nextEl.closest('.elm-math-rescued-block')) {
             j++;
             continue;
+          }
+
+          if (hasNativeRenderedMath(nextEl)) {
+            break;
           }
 
           const nextHidden = nextEl.querySelector(':scope > .elm-math-hidden-original');
