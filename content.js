@@ -21,7 +21,7 @@
   // before handing the text back to KaTeX.
   function getMathAwareText(el) {
     const raw = el.textContent || '';
-    if (!raw.includes('$')) return raw;
+    if (!hasMath(raw)) return raw;
 
     const clone = el.cloneNode(true);
 
