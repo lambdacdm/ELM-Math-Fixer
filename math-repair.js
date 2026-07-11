@@ -8,186 +8,23 @@
 
   const hasMath = (text) => text.includes('$') || text.includes('\\(') || text.includes('\\[');
 
-  const MULTILINE_MATH_ENVIRONMENTS = new Set([
-    'align',
-    'aligned',
-    'alignedat',
-    'alignat',
-    'array',
-    'bmatrix',
-    'Bmatrix',
-    'cases',
-    'dcases',
-    'flalign',
-    'gather',
-    'gathered',
-    'matrix',
-    'multline',
-    'pmatrix',
-    'rcases',
-    'split',
-    'Vmatrix',
-    'vmatrix'
-  ]);
-  const KNOWN_LATEX_COMMAND_CACHE = new Map();
+  const CORE = globalThis.ELMMathFixerCore;
+  if (!CORE) throw new Error('ELM Math Fixer core failed to load.');
+  const {
+    validateWithLiteralUnknownCommands,
+    normalizePairedEscapedSetBraces,
+    normalizeMathBackslashes,
+    normalizeMathDelimiterWhitespace,
+    protectMathBoundaryWhitespace,
+    isEscapedAt,
+    getMathSegmentDetails,
+    isSafeMixedTextMath
+  } = CORE;
   const MAX_SPLIT_MATH_NODES = 12;
   const MAX_SPLIT_MATH_LENGTH = 50000;
+  const MAX_MISPAIRED_NATIVE_MATH = 12;
+  const MAX_MISPAIRED_NATIVE_LENGTH = 20000;
   const SETEXT_OPERATOR_BY_TAG = { H1: '=', H2: '-' };
-
-  function validateLatex(source, options = {}) {
-    const renderer = globalThis.katex;
-    if (!renderer || typeof renderer.renderToString !== 'function') {
-      return { ok: false, error: null };
-    }
-
-    try {
-      renderer.renderToString(source, {
-        throwOnError: true,
-        strict: 'error',
-        ...options
-      });
-      return { ok: true, error: null };
-    } catch (error) {
-      return { ok: false, error };
-    }
-  }
-
-  function getUndefinedCommand(error) {
-    const match = String(error?.message || '').match(
-      /Undefined control sequence:\s*(\\[A-Za-z]+)/
-    );
-    return match?.[1] || null;
-  }
-
-  function literalUnknownCommandMacro(command) {
-    const name = command.slice(1);
-    return `\\mathord{\\backslash\\mathrm{${name}}}`;
-  }
-
-  function validateWithLiteralUnknownCommands(source, options = {}, initialMacros = {}) {
-    const macros = { ...initialMacros };
-
-    for (let attempt = 0; attempt < 16; attempt++) {
-      const result = validateLatex(source, { ...options, macros });
-      if (result.ok) return { ok: true, macros };
-
-      const command = getUndefinedCommand(result.error);
-      if (!command || macros[command]) return { ok: false, macros, error: result.error };
-      macros[command] = literalUnknownCommandMacro(command);
-    }
-
-    return { ok: false, macros, error: new Error('too many undefined control sequences') };
-  }
-
-  function isMultilineMathEnvironment(name) {
-    return MULTILINE_MATH_ENVIRONMENTS.has(name.replace(/\*$/, ''));
-  }
-
-  function isKnownLatexCommand(command) {
-    if (KNOWN_LATEX_COMMAND_CACHE.has(command)) {
-      return KNOWN_LATEX_COMMAND_CACHE.get(command);
-    }
-
-    const result = validateLatex(`\\${command}`, { strict: 'ignore' });
-    const isKnown = result.ok ||
-      Boolean(result.error && !String(result.error.message).includes('Undefined control sequence'));
-
-    KNOWN_LATEX_COMMAND_CACHE.set(command, isKnown);
-    return isKnown;
-  }
-
-  function normalizeLatexBackslashes(source) {
-    return source.replace(
-      /(?<!\\)\\{2}(?=([A-Za-z]+))/g,
-      (backslashes, command) => (isKnownLatexCommand(command) ? '\\' : backslashes)
-    );
-  }
-
-  function unwrapEscapedLatexLayer(source) {
-    const runs = [];
-    let knownEscapedCommands = 0;
-
-    for (let i = 0; i < source.length;) {
-      if (source[i] !== '\\') {
-        i++;
-        continue;
-      }
-
-      const start = i;
-      while (source[i] === '\\') i++;
-      const length = i - start;
-      runs.push({ start, length });
-
-      if (length === 2) {
-        const command = source.slice(i).match(/^([A-Za-z]+)/)?.[1];
-        if (command && isKnownLatexCommand(command)) knownEscapedCommands++;
-      }
-    }
-
-    if (
-      runs.length < 3 ||
-      knownEscapedCommands < 3 ||
-      runs.some((run) => run.length % 2 !== 0)
-    ) {
-      return source;
-    }
-
-    let candidate = '';
-    let cursor = 0;
-    runs.forEach(({ start, length }) => {
-      candidate += source.slice(cursor, start);
-      candidate += '\\'.repeat(length / 2);
-      cursor = start + length;
-    });
-    candidate += source.slice(cursor);
-
-    return validateWithLiteralUnknownCommands(candidate).ok ? candidate : source;
-  }
-
-  function hasUnresolvedDoubledBackslash(source) {
-    const environmentPattern = /\\+(begin|end)\{([^{}]+)\}/g;
-    const environmentStack = [];
-    let cursor = 0;
-    let match;
-
-    const hasUnsafeSegment = (segment) =>
-      !environmentStack.some(isMultilineMathEnvironment) && /\\{2,}(?=\S)/.test(segment);
-
-    while ((match = environmentPattern.exec(source)) !== null) {
-      if (hasUnsafeSegment(source.slice(cursor, match.index))) return true;
-
-      const [, command, environmentName] = match;
-      if (command === 'begin') {
-        environmentStack.push(environmentName);
-      } else {
-        const matchingIndex = environmentStack.lastIndexOf(environmentName);
-        if (matchingIndex !== -1) environmentStack.splice(matchingIndex, 1);
-      }
-
-      cursor = environmentPattern.lastIndex;
-    }
-
-    return hasUnsafeSegment(source.slice(cursor));
-  }
-
-  function normalizeMathBackslashes(text) {
-    const mathSegmentPattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\r\n]*?\$/g;
-
-    return text.replace(mathSegmentPattern, (segment) => {
-      if (segment.startsWith('$$')) {
-        const body = unwrapEscapedLatexLayer(segment.slice(2, -2));
-        return `$$${normalizeLatexBackslashes(body)}$$`;
-      }
-
-      if (segment.startsWith('\\[') || segment.startsWith('\\(')) {
-        const body = unwrapEscapedLatexLayer(segment.slice(2, -2));
-        return `${segment.slice(0, 2)}${normalizeLatexBackslashes(body)}${segment.slice(-2)}`;
-      }
-
-      const body = unwrapEscapedLatexLayer(segment.slice(1, -1));
-      return `$${normalizeLatexBackslashes(body)}$`;
-    });
-  }
 
   function getCodeWrappedMathText(code) {
     if (
@@ -206,7 +43,7 @@
       /^\\\([\s\S]+\\\)$/.test(text);
 
     if (!isDelimitedMath) return null;
-    return text.replace(/\$\s+/g, '$').replace(/\s+\$/g, '$');
+    return normalizeMathDelimiterWhitespace(text);
   }
 
   function rescueCodeWrappedMath(container) {
@@ -237,94 +74,6 @@
     });
   }
 
-  function isEscapedAt(text, index) {
-    let backslashCount = 0;
-    for (let i = index - 1; i >= 0 && text[i] === '\\'; i--) backslashCount++;
-    return backslashCount % 2 === 1;
-  }
-
-  function getMathSegmentDetails(segment) {
-    if (segment.startsWith('$$')) {
-      return { body: segment.slice(2, -2), displayMode: true };
-    }
-
-    if (segment.startsWith('\\[')) {
-      return { body: segment.slice(2, -2), displayMode: true };
-    }
-
-    if (segment.startsWith('\\(')) {
-      return { body: segment.slice(2, -2), displayMode: false };
-    }
-
-    return { body: segment.slice(1, -1), displayMode: false };
-  }
-
-  function isSafeMixedTextMath(text, options = {}) {
-    const { allowUndefinedCommands = false } = options;
-    if (!globalThis.katex || typeof globalThis.katex.renderToString !== 'function') return false;
-
-    const segmentPattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
-    const coveredRanges = [];
-    let foundMath = false;
-    let match;
-
-    while ((match = segmentPattern.exec(text)) !== null) {
-      const segment = match[0];
-      const closingIndex = match.index + segment.length - 1;
-      const isSingleDollar = segment.startsWith('$') && !segment.startsWith('$$');
-      if (
-        segment.startsWith('$') &&
-        (isEscapedAt(text, match.index) || isEscapedAt(text, closingIndex))
-      ) {
-        return false;
-      }
-
-      const { body, displayMode } = getMathSegmentDetails(segment);
-      const trimmedBody = body.trim();
-      if (!trimmedBody) return false;
-
-      // Avoid treating two currency amounts such as "$5 and $10" as one formula.
-      const followingCharacter = text[match.index + segment.length] || '';
-      if (isSingleDollar && /^\d/.test(trimmedBody) && /^\d/.test(followingCharacter)) {
-        return false;
-      }
-
-      const normalizedSegment = normalizeMathBackslashes(segment);
-      const normalizedBody = getMathSegmentDetails(normalizedSegment).body;
-      if (hasUnresolvedDoubledBackslash(normalizedBody)) return false;
-
-      const validation = allowUndefinedCommands
-        ? validateWithLiteralUnknownCommands(normalizedBody, { displayMode })
-        : validateLatex(normalizedBody, { displayMode });
-      if (!validation.ok) return false;
-
-      coveredRanges.push({ start: match.index, end: match.index + segment.length });
-      foundMath = true;
-    }
-
-    if (!foundMath) return false;
-
-    let rangeIndex = 0;
-    for (let i = 0; i < text.length; i++) {
-      while (coveredRanges[rangeIndex]?.end <= i) rangeIndex++;
-      const coveredRange = coveredRanges[rangeIndex];
-      if (coveredRange && i >= coveredRange.start && i < coveredRange.end) {
-        i = coveredRange.end - 1;
-        continue;
-      }
-      if (text[i] === '$' && !isEscapedAt(text, i)) return false;
-      if (
-        text[i] === '\\' &&
-        (text[i + 1] === '(' || text[i + 1] === '[') &&
-        !isEscapedAt(text, i)
-      ) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   function rescueMixedTextMath(el) {
     const ignoredSelector = [
       'code',
@@ -334,7 +83,11 @@
       '.elm-math-rescued-block',
       '.elm-math-rescued-code',
       '.elm-math-rescued-text',
-      '.elm-math-rescued-wrapper'
+      '.elm-math-rescued-wrapper',
+      '.elm-math-local-chain',
+      '.elm-math-local-original',
+      '.elm-math-local-rendered',
+      '.elm-math-native-brace-repair'
     ].join(', ');
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     const candidates = [];
@@ -367,6 +120,319 @@
   function hasNativeRenderedMath(el) {
     const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
     return !wrapper && Boolean(el.querySelector('.katex, .katex-display'));
+  }
+
+  function getNativeMathSource(math) {
+    return (
+      math.querySelector('annotation[encoding="application/x-tex"]')?.textContent ||
+      math.dataset.copytexLatex ||
+      ''
+    );
+  }
+
+  function restoreNativeBraceRepair(host) {
+    const original = host.querySelector(':scope > .elm-math-native-brace-original');
+    if (!original) {
+      host.remove();
+      return;
+    }
+
+    original.style.display = original.dataset.elmMathOriginalDisplay || '';
+    delete original.dataset.elmMathOriginalDisplay;
+    original.classList.remove('elm-math-native-brace-original');
+    host.replaceWith(original);
+  }
+
+  function rescueNativePairedSetBraces(el) {
+    const roots = Array.from(el.querySelectorAll('.katex-display, .katex')).filter((root) => {
+      if (root.closest('.elm-math-native-brace-repair')) return false;
+      if (root.matches('.katex-display')) {
+        return !root.parentElement?.closest('.katex-display');
+      }
+      return !root.parentElement?.closest('.katex, .katex-display');
+    });
+    let repaired = false;
+
+    roots.forEach((root) => {
+      const source = getNativeMathSource(root);
+      const normalized = normalizePairedEscapedSetBraces(source);
+      if (!source || normalized === source) return;
+
+      const displayMode = root.matches('.katex-display');
+      const rendered = document.createElement('span');
+      rendered.className = 'elm-math-native-brace-rendered';
+      rendered.textContent = displayMode ? `$$${normalized}$$` : `$${normalized}$`;
+
+      try {
+        renderMathInto(rendered, { allowUndefinedCommands: true });
+        if (rendered.querySelectorAll('.katex').length !== 1 || rendered.querySelector('.katex-error')) {
+          return;
+        }
+
+        const host = document.createElement('span');
+        host.className = 'elm-math-native-brace-repair';
+        host.dataset.rawText = source;
+        root.dataset.elmMathOriginalDisplay = root.style.display;
+        root.classList.add('elm-math-native-brace-original');
+        root.style.display = 'none';
+        root.replaceWith(host);
+        host.append(root, rendered);
+        repaired = true;
+      } catch (error) {
+        warn('failed to repair paired escaped set braces:', error);
+      }
+    });
+
+    return repaired;
+  }
+
+  function isLikelyMispairedProse(source) {
+    const trimmed = source.trim();
+    return (
+      trimmed.split(/\s+/).length >= 2 &&
+      /^[\p{L}\p{M}][\p{L}\p{M}\s,.;:'"!?()\-\u2013\u2014]*$/u.test(trimmed)
+    );
+  }
+
+  function countUnescapedDollars(text) {
+    let count = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '$' && !isEscapedAt(text, i)) count++;
+    }
+    return count;
+  }
+
+  function hasProseLikeInlineMath(text) {
+    const segmentPattern = /\$(?!\$)([^$\r\n]+?)\$/g;
+    let match;
+    while ((match = segmentPattern.exec(text)) !== null) {
+      if (isLikelyMispairedProse(match[1])) return true;
+    }
+    return false;
+  }
+
+  function padMispairedNativeText(source) {
+    const leadingSpace = /^\s/.test(source) || /^[,.;:!?)\]}]/.test(source) ? '' : ' ';
+    const trailingSpace = /\s$/.test(source) || /[(\[{]$/.test(source) ? '' : ' ';
+    return `${leadingSpace}${source}${trailingSpace}`;
+  }
+
+  function collectMispairedNativeTokens(el) {
+    const tokens = [];
+    let virtualText = '';
+
+    function addToken(token, text) {
+      token.start = virtualText.length;
+      virtualText += text;
+      token.end = virtualText.length;
+      token.text = text;
+      tokens.push(token);
+    }
+
+    function visit(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        if (text) {
+          addToken(
+            {
+              type: 'text',
+              node,
+              restricted: Boolean(node.parentElement?.closest('a, code, pre, button'))
+            },
+            text
+          );
+        }
+        return;
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const element = node;
+      if (
+        element.matches(
+          '.elm-math-local-original, .elm-math-local-chain, .elm-math-native-brace-repair'
+        )
+      ) {
+        return;
+      }
+
+      if (
+        element.matches('.katex') &&
+        !element.parentElement?.closest('.katex') &&
+        !element.closest('.katex-display')
+      ) {
+        const source = getNativeMathSource(element);
+        if (!source) return;
+        const paddedSource = padMispairedNativeText(source);
+        addToken(
+          {
+            type: 'math',
+            node: element,
+            source,
+            restricted: Boolean(element.closest('a, code, pre, button'))
+          },
+          `$${paddedSource}$`
+        );
+        return;
+      }
+
+      Array.from(element.childNodes).forEach(visit);
+    }
+
+    Array.from(el.childNodes).forEach(visit);
+    return { tokens, virtualText };
+  }
+
+  function findMispairedNativeRanges(el) {
+    const { tokens, virtualText } = collectMispairedNativeTokens(el);
+    const mathTokens = tokens.filter((token) => token.type === 'math');
+    if (mathTokens.length === 0 || mathTokens.length > MAX_MISPAIRED_NATIVE_MATH) return [];
+
+    const rawDollars = [];
+    tokens.forEach((token) => {
+      if (token.type !== 'text') return;
+      for (let offset = 0; offset < token.text.length; offset++) {
+        if (token.text[offset] === '$' && !isEscapedAt(token.text, offset)) {
+          rawDollars.push({ token, offset, position: token.start + offset });
+        }
+      }
+    });
+
+    const candidates = [];
+    for (let i = 0; i + 1 < rawDollars.length; i += 2) {
+      const start = rawDollars[i];
+      const end = rawDollars[i + 1];
+      const enclosedTokens = tokens.filter(
+        (token) => token.start > start.position && token.end <= end.position
+      );
+      const enclosedMath = enclosedTokens.filter((token) => token.type === 'math');
+      const reconstructed = virtualText.slice(start.position, end.position + 1);
+      const dollarCount = countUnescapedDollars(reconstructed);
+      const inspectionRange = document.createRange();
+      inspectionRange.setStart(start.token.node, start.offset);
+      inspectionRange.setEnd(end.token.node, end.offset + 1);
+      const crossesRestrictedMarkup = Boolean(
+        inspectionRange.cloneContents().querySelector?.('a, code, pre, img, button')
+      );
+
+      if (
+        enclosedMath.length === 0 ||
+        enclosedTokens.some((token) => token.restricted) ||
+        start.token.restricted ||
+        end.token.restricted ||
+        crossesRestrictedMarkup ||
+        reconstructed.length > MAX_MISPAIRED_NATIVE_LENGTH ||
+        reconstructed.includes('$$') ||
+        dollarCount < 4 ||
+        dollarCount % 2 !== 0 ||
+        hasProseLikeInlineMath(reconstructed) ||
+        !isSafeMixedTextMath(reconstructed, { allowUndefinedCommands: true })
+      ) {
+        continue;
+      }
+
+      candidates.push({ start, end, reconstructed, dollarCount });
+    }
+
+    return candidates;
+  }
+
+  function restoreLocalMathChain(host) {
+    const original = host.querySelector(':scope > .elm-math-local-original');
+    const parent = host.parentNode;
+    if (!original || !parent) {
+      host.remove();
+      return;
+    }
+
+    while (original.firstChild) parent.insertBefore(original.firstChild, host);
+    host.remove();
+    parent.normalize();
+  }
+
+  function rescueMispairedNativeInlineMath(el) {
+    const candidates = findMispairedNativeRanges(el);
+    if (candidates.length === 0) return false;
+
+    const prepared = [];
+    try {
+      candidates.forEach((candidate) => {
+        const rendered = document.createElement('span');
+        rendered.className = 'elm-math-local-rendered';
+        rendered.textContent = candidate.reconstructed;
+        renderMathInto(rendered, { allowUndefinedCommands: true });
+        if (
+          rendered.querySelectorAll('.katex').length !== candidate.dollarCount / 2 ||
+          rendered.querySelector('.katex-error')
+        ) {
+          throw new Error('local reconstruction did not render every formula');
+        }
+        prepared.push({ ...candidate, rendered });
+      });
+    } catch (error) {
+      warn('failed to validate local native math repair:', error);
+      return false;
+    }
+
+    const inserted = [];
+    try {
+      prepared
+        .sort((a, b) => b.start.position - a.start.position)
+        .forEach((candidate) => {
+          const range = document.createRange();
+          range.setStart(candidate.start.token.node, candidate.start.offset);
+          range.setEnd(candidate.end.token.node, candidate.end.offset + 1);
+
+          const original = document.createElement('span');
+          original.className = 'elm-math-local-original';
+          original.style.display = 'none';
+          original.appendChild(range.extractContents());
+
+          const host = document.createElement('span');
+          host.className = 'elm-math-local-chain';
+          host.dataset.rawText = candidate.reconstructed;
+          host.append(original, candidate.rendered);
+          range.insertNode(host);
+          inserted.push(host);
+        });
+      return inserted.length > 0;
+    } catch (error) {
+      inserted.forEach(restoreLocalMathChain);
+      warn('failed to install local native math repair:', error);
+      return false;
+    }
+  }
+
+  function protectNativeMathBoundaryWhitespace(el) {
+    el.querySelectorAll('.katex').forEach((math) => {
+      if (
+        math.parentElement?.closest('.katex') ||
+        math.closest(
+          '.katex-display, .elm-math-local-chain, .elm-math-rescued-text, .elm-math-native-brace-repair'
+        )
+      ) {
+        return;
+      }
+
+      const before = math.previousSibling;
+      if (before?.nodeType === Node.TEXT_NODE && /[ \t]$/.test(before.textContent || '')) {
+        before.textContent = (before.textContent || '').slice(0, -1);
+        const spacer = document.createElement('span');
+        spacer.className = 'elm-math-boundary-space';
+        spacer.dataset.originalWhitespace = ' ';
+        spacer.textContent = '\u00a0';
+        math.before(spacer);
+      }
+
+      const after = math.nextSibling;
+      if (after?.nodeType === Node.TEXT_NODE && /^[ \t]/.test(after.textContent || '')) {
+        after.textContent = (after.textContent || '').slice(1);
+        const spacer = document.createElement('span');
+        spacer.className = 'elm-math-boundary-space';
+        spacer.dataset.originalWhitespace = ' ';
+        spacer.textContent = '\u00a0';
+        math.after(spacer);
+      }
+    });
   }
 
   function getMathBodyRanges(text) {
@@ -434,6 +500,23 @@
     );
   }
 
+  function isEmptySplitListMarker(node) {
+    if (!node?.matches('ol, ul') || node.children.length !== 1) return false;
+    const item = node.firstElementChild;
+    return item?.tagName === 'LI' && !(item.textContent || '').trim();
+  }
+
+  function hasOnlyAllowedSplitSeparators(previous, next) {
+    let cursor = previous.nextElementSibling;
+    let emptyListCount = 0;
+    while (cursor && cursor !== next) {
+      if (!isEmptySplitListMarker(cursor) || emptyListCount > 0) return false;
+      emptyListCount++;
+      cursor = cursor.nextElementSibling;
+    }
+    return cursor === next;
+  }
+
   // Markdown consumes standalone "=" and "-" lines as Setext heading markers.
   // Infer them only inside one structurally continuous split display formula.
   function inferSetextOperatorRepair(group) {
@@ -449,7 +532,7 @@
     for (let i = 1; i < group.length; i++) {
       if (
         group[i].parentElement !== group[0].parentElement ||
-        group[i - 1].nextElementSibling !== group[i]
+        !hasOnlyAllowedSplitSeparators(group[i - 1], group[i])
       ) {
         return null;
       }
@@ -470,14 +553,26 @@
       if (index === fragments.length - 1) body = body.slice(0, -2).trim();
       return body;
     });
-    if (mathFragments.some((fragment) => !isLikelyMathFragment(fragment))) return null;
+    const nonemptyMathFragments = mathFragments.filter(Boolean);
+    const hasClosingOnlyParagraph =
+      mathFragments[mathFragments.length - 1] === '' && closingText === '$$';
+    if (nonemptyMathFragments.length < 2) return null;
+    if (mathFragments.some((fragment, index) => {
+      if (fragment) return !isLikelyMathFragment(fragment);
+      return index !== mathFragments.length - 1 || !hasClosingOnlyParagraph;
+    })) {
+      return null;
+    }
 
     let repairedText = '';
+    const effectiveOperators = [];
     group.forEach((node, index) => {
       repairedText += fragments[index];
       const operator = SETEXT_OPERATOR_BY_TAG[node.tagName];
-      if (operator) {
+      const hasLaterMathFragment = mathFragments.slice(index + 1).some(Boolean);
+      if (operator && hasLaterMathFragment) {
         repairedText += `\n${operator}\n`;
+        effectiveOperators.push(operator);
       } else if (index < group.length - 1) {
         repairedText += '\n';
       }
@@ -486,8 +581,8 @@
     if (!isSafeMixedTextMath(repairedText, { allowUndefinedCommands: true })) return null;
 
     let reason = 'setext-operators';
-    if (operators.length === 1 && operators[0] === '=') reason = 'setext-equals';
-    if (operators.length === 1 && operators[0] === '-') reason = 'setext-minus';
+    if (effectiveOperators.length === 1 && effectiveOperators[0] === '=') reason = 'setext-equals';
+    if (effectiveOperators.length === 1 && effectiveOperators[0] === '-') reason = 'setext-minus';
     return { text: repairedText, reason };
   }
 
@@ -498,9 +593,7 @@
 
     while ((node = walker.nextNode())) textNodes.push(node);
     textNodes.forEach((textNode) => {
-      textNode.textContent = (textNode.textContent || '')
-        .replace(/\$\s+/g, '$')
-        .replace(/\s+\$/g, '$');
+      textNode.textContent = normalizeMathDelimiterWhitespace(textNode.textContent || '');
     });
     clone.normalize();
     return clone;
@@ -531,7 +624,9 @@
 
     while ((node = walker.nextNode())) textNodes.push(node);
     textNodes.forEach((textNode) => {
-      const normalizedText = normalizeMathBackslashes(textNode.textContent || '');
+      const normalizedText = protectMathBoundaryWhitespace(
+        normalizeMathBackslashes(textNode.textContent || '')
+      );
       if (normalizedText !== textNode.textContent) textNode.textContent = normalizedText;
     });
 
@@ -591,6 +686,9 @@
   }
 
   function restoreAllRescuedMath() {
+    document.querySelectorAll('.elm-math-local-chain').forEach(restoreLocalMathChain);
+    document.querySelectorAll('.elm-math-native-brace-repair').forEach(restoreNativeBraceRepair);
+
     document.querySelectorAll('.elm-math-hidden-original').forEach((hiddenOriginal) => {
       const el = hiddenOriginal.parentElement;
       if (!el) return;
@@ -617,6 +715,12 @@
       host.replaceWith(document.createTextNode(host.dataset.rawText || ''));
     });
 
+    document.querySelectorAll('.elm-math-boundary-space').forEach((spacer) => {
+      const parent = spacer.parentNode;
+      spacer.replaceWith(document.createTextNode(spacer.dataset.originalWhitespace || ' '));
+      parent?.normalize();
+    });
+
     document.querySelectorAll('.elm-math-rescued-block').forEach((block) => block.remove());
     document.querySelectorAll('.elm-math-split-original').forEach(restoreSplitOriginal);
     document.querySelectorAll('.elm-math-rescued-container').forEach((container) => {
@@ -624,22 +728,84 @@
     });
   }
 
-  function processContainer(container) {
-    rescueCodeWrappedMath(container);
+  function getAffectedMathElements(container, children, affectedRoots) {
+    if (affectedRoots === null || affectedRoots === undefined) return null;
+    const directIndexes = new Set();
+
+    for (const root of affectedRoots) {
+      const element = root?.nodeType === Node.ELEMENT_NODE ? root : root?.parentElement;
+      if (!element?.isConnected) continue;
+      if (element === container || element.contains?.(container)) return null;
+
+      children.forEach((child, index) => {
+        if (child === element || child.contains(element) || element.contains?.(child)) {
+          directIndexes.add(index);
+        }
+      });
+    }
+
+    const affected = new Set();
+    directIndexes.forEach((index) => {
+      const start = Math.max(0, index - MAX_SPLIT_MATH_NODES);
+      const end = Math.min(children.length - 1, index + MAX_SPLIT_MATH_NODES);
+      for (let nearbyIndex = start; nearbyIndex <= end; nearbyIndex++) {
+        affected.add(children[nearbyIndex]);
+      }
+    });
+    return affected;
+  }
+
+  function processContainer(container, affectedRoots = null) {
+    if (!container?.isConnected) return;
 
     const children = Array.from(container.querySelectorAll(TARGET_ELEMENTS));
-    log('matched text elements:', children.length, container);
+    const affectedElements = getAffectedMathElements(container, children, affectedRoots);
+    if (affectedElements && affectedElements.size === 0) return;
+
+    rescueCodeWrappedMath(container);
+    log(
+      'matched text elements:',
+      affectedElements ? affectedElements.size : children.length,
+      container
+    );
 
     let i = 0;
     while (i < children.length) {
       const el = children[i];
+
+      if (affectedElements && !affectedElements.has(el)) {
+        i++;
+        continue;
+      }
 
       if (el.closest('.elm-math-rescued-block') || el.classList.contains('elm-math-hidden-original')) {
         i++;
         continue;
       }
 
+      if (el.closest('.elm-math-local-original')) {
+        i++;
+        continue;
+      }
+
+      rescueNativePairedSetBraces(el);
+
+      if (el.querySelector('.elm-math-local-chain')) {
+        rescueMispairedNativeInlineMath(el);
+        protectNativeMathBoundaryWhitespace(el);
+        rescueMixedTextMath(el);
+        i++;
+        continue;
+      }
+
       if (hasNativeRenderedMath(el)) {
+        if (rescueMispairedNativeInlineMath(el)) {
+          protectNativeMathBoundaryWhitespace(el);
+          rescueMixedTextMath(el);
+          i++;
+          continue;
+        }
+        protectNativeMathBoundaryWhitespace(el);
         rescueMixedTextMath(el);
         i++;
         continue;
@@ -661,12 +827,18 @@
         const group = [el];
         let combinedText = text;
         let foundEnd = false;
-        let j = i + 1;
+        let nextEl = el.nextElementSibling;
 
-        while (j < children.length && group.length < MAX_SPLIT_MATH_NODES) {
-          const nextEl = children[j];
+        while (nextEl && group.length < MAX_SPLIT_MATH_NODES) {
+          if (isEmptySplitListMarker(nextEl)) {
+            nextEl = nextEl.nextElementSibling;
+            continue;
+          }
+
+          const nextIndex = children.indexOf(nextEl);
+          if (nextIndex < 0) break;
           if (nextEl.closest('.elm-math-rescued-block')) {
-            j++;
+            nextEl = nextEl.nextElementSibling;
             continue;
           }
 
@@ -674,7 +846,7 @@
           if (
             !['H1', 'H2', 'P'].includes(nextEl.tagName) ||
             nextEl.parentElement !== el.parentElement ||
-            previousEl.nextElementSibling !== nextEl
+            !hasOnlyAllowedSplitSeparators(previousEl, nextEl)
           ) {
             break;
           }
@@ -695,11 +867,11 @@
           const nextDelimiterCount = (nextText.match(/\$\$/g) || []).length;
           if (nextDelimiterCount % 2 === 1) {
             foundEnd = true;
-            i = j;
+            i = nextIndex;
             break;
           }
 
-          j++;
+          nextEl = nextEl.nextElementSibling;
         }
 
         if (foundEnd) {
@@ -763,7 +935,7 @@
           }
         }
       } else if (hasMath(text)) {
-        const cleanedText = text.replace(/\$\s+/g, '$').replace(/\s+\$/g, '$');
+        const cleanedText = normalizeMathDelimiterWhitespace(text);
 
         if (!isSafeMixedTextMath(cleanedText)) {
           if (hiddenOriginal) restoreSingleLineElement(el, hiddenOriginal, wrapper);

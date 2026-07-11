@@ -34,8 +34,10 @@ if (Test-Path -LiteralPath $OutputPath) {
 
 $runtimeFiles = @(
   'manifest.json',
+  'math-core.js',
   'math-repair.js',
   'content.js',
+  'runtime.js',
   'prompts.js',
   'ui.css',
   'README.md',
@@ -80,7 +82,7 @@ try {
 $check = [IO.Compression.ZipFile]::OpenRead($OutputPath)
 try {
   $entryNames = @($check.Entries | ForEach-Object FullName)
-  foreach ($required in @('manifest.json', 'math-repair.js', 'content.js', 'prompts.js', 'ui.css', 'icons/icon128.png')) {
+  foreach ($required in @('manifest.json', 'math-core.js', 'math-repair.js', 'content.js', 'runtime.js', 'prompts.js', 'ui.css', 'icons/icon128.png')) {
     if ($required -notin $entryNames) {
       throw "Package is missing $required."
     }

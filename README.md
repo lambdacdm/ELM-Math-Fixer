@@ -11,7 +11,7 @@ ELM Math Fixer is a small Chrome extension that improves KaTeX math rendering on
 
 The extension is a complete standalone solution for known common rendering failures. The optional prompt is only a partial aid.
 
-Extension version: 1.0.7.
+Extension version: 1.0.8.
 
 Bundled KaTeX version: [0.17.0](https://github.com/KaTeX/KaTeX). This matches the version currently declared by the upstream `main` source.
 
@@ -21,14 +21,12 @@ This project was developed with GPT-5.6 Sol, Claude Sonnet 5, and Gemini 3.5 Fla
 
 ELM appears to parse Markdown before KaTeX, so formulas can be altered or split before the math renderer sees them. The extension repairs these known failure patterns locally in the browser:
 
-- Reassembles `$$...$$` display formulas split across multiple Markdown paragraphs by literal line breaks.
-- Restores an equation's standalone `=` when Markdown consumes it as a Setext heading marker.
-- Recovers formula underscores that Markdown converted into emphasis, while preserving genuine emphasis in ordinary prose.
-- Renders valid formulas mistakenly wrapped as inline code or left as unrendered text.
-- Corrects accidental doubled backslashes before recognized LaTeX commands.
-- Removes stray whitespace immediately inside dollar delimiters.
+- Rebuilds `$$...$$` display math split by Markdown, including swallowed `=` signs and damaged subscripts.
+- Repairs shifted `$...$` boundaries that render prose as math or leave formulas unrendered.
+- Renders valid formulas left as plain text or inline code while preserving nearby formatting and spacing.
+- Corrects accidental doubled backslashes before LaTeX commands and paired set braces.
 
-Repairs are applied only when the DOM structure matches a known failure pattern and the reconstructed formula passes KaTeX validation.
+Repairs run only when the DOM matches a known failure pattern and the reconstruction passes structural and KaTeX safety checks.
 
 It also adds a small prompt picker to the ELM chat page, so you can copy recommended math-formatting prompts without changing your ELM account automatically.
 
@@ -56,7 +54,7 @@ ELM Math Fixer 是一个小型 Chrome 扩展，用于改善爱丁堡大学 [ELM 
 
 插件可独立完整修复已知的常见渲染问题；提示词仅为可选的辅助方案，只能解决部分问题。
 
-插件版本：1.0.7。
+插件版本：1.0.8。
 
 内置 KaTeX 版本：[0.17.0](https://github.com/KaTeX/KaTeX)。该版本与 KaTeX 上游仓库当前 `main` 源码声明的版本一致。
 
@@ -66,14 +64,12 @@ ELM Math Fixer 是一个小型 Chrome 扩展，用于改善爱丁堡大学 [ELM 
 
 ELM 平台看起来会先解析 Markdown，再交给 KaTeX，因此公式可能在进入数学渲染器之前就被修改或拆散。插件会在浏览器本地修复以下已知问题：
 
-- 重新拼合因真实换行而被 Markdown 拆成多个段落的 `$$...$$` 展示公式。
-- 恢复被 Markdown 当作 Setext 标题标记吞掉的独占一行等号 `=`。
-- 恢复被 Markdown 误识别为强调格式的公式下划线，同时保留普通正文中的正常强调格式。
-- 渲染被误包成行内代码或残留为原始文本的有效公式。
-- 修正已知 LaTeX 命令前误生成的双反斜杠。
-- 清除美元符号分隔符内侧多余的空格。
+- 重建被 Markdown 拆散的 `$$...$$` 展示公式，包括被吞掉的等号和损坏的下标。
+- 修复错位的 `$...$` 边界，避免正文被渲染成公式或公式残留为原始文本。
+- 渲染残留为普通文本或行内代码的有效公式，同时保留附近的格式和间距。
+- 修正 LaTeX 命令和成对集合花括号前误生成的双反斜杠。
 
-插件只在 DOM 结构符合已知错误特征且重建后的公式通过 KaTeX 验证时执行修复。
+插件只在 DOM 符合已知错误特征，且重建结果通过结构与 KaTeX 安全检查时执行修复。
 
 它也会在 ELM 聊天页面添加一个小型提示词选择器，方便你复制推荐的数学格式提示词；插件不会自动修改你的 ELM 账号设置。
 

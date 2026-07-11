@@ -46,52 +46,7 @@
 
   const MATH_REPAIR = globalThis.ELMMathFixerRepair;
   if (!MATH_REPAIR) throw new Error('ELM Math Fixer repair engine failed to load.');
-  const { processContainer, restoreAllRescuedMath } = MATH_REPAIR;
-
-  function collectScanContainers(roots) {
-    const containers = new Set();
-
-    roots.forEach((root) => {
-      if (!root) return;
-      if (root === document) {
-        document.querySelectorAll(CONTAINER_SELECTOR).forEach((container) => containers.add(container));
-        return;
-      }
-
-      const element = root.nodeType === Node.ELEMENT_NODE ? root : root.parentElement;
-      if (!element || !element.isConnected) return;
-
-      const closest = element.closest?.(CONTAINER_SELECTOR);
-      if (closest) containers.add(closest);
-      if (element.matches?.(CONTAINER_SELECTOR)) containers.add(element);
-      element.querySelectorAll?.(CONTAINER_SELECTOR).forEach((container) => containers.add(container));
-    });
-
-    const containerList = Array.from(containers);
-    return containerList.filter(
-      (container) =>
-        !containerList.some(
-          (other) => other !== container && container.contains(other)
-        )
-    );
-  }
-
-  function scan(roots = [document], refreshUi = true) {
-    if (refreshUi) ensurePromptLauncher();
-    if (!isFixerEnabled()) {
-      restoreAllRescuedMath();
-      return;
-    }
-
-    if (typeof renderMathInElement !== 'function') {
-      warn('KaTeX auto-render is not available. Check manifest paths.');
-      return;
-    }
-
-    const containers = collectScanContainers(roots);
-    log('matched containers:', containers.length);
-    containers.forEach(processContainer);
-  }
+  const { restoreAllRescuedMath } = MATH_REPAIR;
 
   function isVisible(el) {
     const rect = el.getBoundingClientRect();
@@ -980,7 +935,7 @@
         setFixerEnabled(enabled);
         updateFixerToggle(toggle);
         if (enabled) {
-          scan();
+          globalThis.ELMMathFixerRuntime?.scan();
         } else {
           restoreAllRescuedMath();
         }
@@ -1152,45 +1107,7 @@
     ensureFixerToggle(button);
   }
 
-  let debounceTimer = null;
   let layoutTimer = null;
-  const pendingScanRoots = new Set();
-  let pendingUiRefresh = false;
-
-  function isInsideMathContent(node) {
-    const element =
-      node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-    return Boolean(element?.closest?.(CONTAINER_SELECTOR));
-  }
-
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      pendingScanRoots.add(mutation.target);
-      if (!isInsideMathContent(mutation.target)) pendingUiRefresh = true;
-
-      mutation.addedNodes.forEach((node) => {
-        pendingScanRoots.add(node);
-        if (!isInsideMathContent(node)) pendingUiRefresh = true;
-      });
-    });
-
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      const roots = Array.from(pendingScanRoots);
-      pendingScanRoots.clear();
-      const refreshUi =
-        pendingUiRefresh ||
-        !document.getElementById(PROMPT_BUTTON_ID) ||
-        !document.getElementById(FIXER_TOGGLE_ID);
-      pendingUiRefresh = false;
-      observer.disconnect();
-      try {
-        scan(roots, refreshUi);
-      } finally {
-        observer.observe(document.body, { childList: true, characterData: true, subtree: true });
-      }
-    }, 300);
-  });
 
   window.addEventListener('resize', () => {
     clearTimeout(layoutTimer);
@@ -1202,7 +1119,12 @@
     }, 120);
   });
 
-  log('content script loaded');
-  scan();
-  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+  globalThis.ELMMathFixerUI = {
+    ensurePromptLauncher,
+    isFixerEnabled,
+    promptButtonId: PROMPT_BUTTON_ID,
+    fixerToggleId: FIXER_TOGGLE_ID
+  };
+
+  log('UI module loaded');
 })();
