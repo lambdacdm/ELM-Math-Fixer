@@ -399,6 +399,52 @@ After that blockquote, output the final answer.`
     return getMathAwareClone(el).textContent || '';
   }
 
+  function isLikelyMathFragment(text) {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+
+    return (
+      /^[A-Za-z]$/.test(trimmed) ||
+      /\\[A-Za-z]+|[_^{}]|\d|[+\-*/<>]|[()[\],]/.test(trimmed)
+    );
+  }
+
+  // Markdown consumes a standalone "=" as a Setext H1 underline. Infer it only
+  // when the remaining DOM has the exact footprint of one split display formula.
+  function inferSetextEqualsRepair(group) {
+    if (group.length < 2 || group[0].tagName !== 'H1') return null;
+    if (group.slice(1).some((node) => node.tagName !== 'P')) return null;
+
+    for (let i = 1; i < group.length; i++) {
+      if (
+        group[i].parentElement !== group[0].parentElement ||
+        group[i - 1].nextElementSibling !== group[i]
+      ) {
+        return null;
+      }
+    }
+
+    const fragments = group.map((node) => getMathAwareText(node));
+    const headingText = fragments[0].trim();
+    const continuationText = fragments.slice(1).join('\n').trim();
+    const completeText = fragments.join('\n');
+
+    if (!headingText.startsWith('$$') || !continuationText.endsWith('$$')) return null;
+    if ((headingText.match(/\$\$/g) || []).length !== 1) return null;
+    if ((completeText.match(/\$\$/g) || []).length !== 2) return null;
+
+    const headingMath = headingText.slice(2).trim();
+    const continuationMath = continuationText.slice(0, -2).trim();
+    if (!isLikelyMathFragment(headingMath) || !isLikelyMathFragment(continuationMath)) {
+      return null;
+    }
+
+    const repairedText = `${fragments[0]}\n=\n${fragments.slice(1).join('\n')}`;
+    if (!isSafeMixedTextMath(repairedText)) return null;
+
+    return { text: repairedText, reason: 'setext-equals' };
+  }
+
   function cleanMathClone(clone) {
     const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
     const textNodes = [];
@@ -559,6 +605,16 @@ After that blockquote, output the final answer.`
         }
 
         if (foundEnd) {
+          group.forEach((node) => {
+            const hidden = node.querySelector(':scope > .elm-math-hidden-original');
+            const oldWrapper = node.querySelector(':scope > .elm-math-rescued-wrapper');
+            if (hidden) restoreSingleLineElement(node, hidden, oldWrapper);
+          });
+
+          combinedText = group.map((node) => getMathAwareText(node)).join('\n');
+          const setextRepair = inferSetextEqualsRepair(group);
+          if (setextRepair) combinedText = setextRepair.text;
+
           const prevSibling = group[0].previousElementSibling;
           if (
             prevSibling &&
@@ -574,22 +630,18 @@ After that blockquote, output the final answer.`
             prevSibling.remove();
           }
 
-          group.forEach((node) => {
-            const hidden = node.querySelector(':scope > .elm-math-hidden-original');
-            const oldWrapper = node.querySelector(':scope > .elm-math-rescued-wrapper');
-            if (hidden) restoreSingleLineElement(node, hidden, oldWrapper);
-          });
-
-          combinedText = group.map((node) => getMathAwareText(node)).join('\n');
-
           const mathBlock = document.createElement('div');
           mathBlock.className = 'elm-math-rescued-block';
           mathBlock.dataset.rawText = combinedText;
+          if (setextRepair) mathBlock.dataset.repairReason = setextRepair.reason;
           mathBlock.style.margin = '1em 0';
           mathBlock.textContent = combinedText;
 
           try {
             renderMathInto(mathBlock);
+            if (!mathBlock.querySelector('.katex') || mathBlock.querySelector('.katex-error')) {
+              throw new Error('split display math did not render cleanly');
+            }
 
             group.forEach(hideSplitOriginal);
             group[0].parentNode.insertBefore(mathBlock, group[0]);
@@ -2146,7 +2198,7 @@ After that blockquote, output the final answer.`
 
     const help = document.createElement('div');
     help.className = 'elm-mf-help';
-    help.textContent = 'Copy a prompt, then open Prompts in the left-hand Tools sidebar, add a new prompt, paste it, and save. For reliable math rendering, use the extension together with the Math Rendering Fix prompt; each fixes a different part of the problem.';
+    help.textContent = 'Copy a prompt, then open Prompts in the left-hand Tools sidebar, add a new prompt, paste it, and save. Prompts are optional, partial aids; the extension is a complete standalone solution.';
     panel.appendChild(help);
 
     PROMPT_GROUPS.forEach((group) => {
