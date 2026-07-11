@@ -731,10 +731,15 @@
   function getAffectedMathElements(container, children, affectedRoots) {
     if (affectedRoots === null || affectedRoots === undefined) return null;
     const directIndexes = new Set();
+    const connectedElements = affectedRoots
+      .map((root) => root?.nodeType === Node.ELEMENT_NODE ? root : root?.parentElement)
+      .filter((element) => element?.isConnected);
+    const specificElements = connectedElements.filter(
+      (element) => element !== container && container.contains(element)
+    );
+    const rootsToInspect = specificElements.length > 0 ? specificElements : connectedElements;
 
-    for (const root of affectedRoots) {
-      const element = root?.nodeType === Node.ELEMENT_NODE ? root : root?.parentElement;
-      if (!element?.isConnected) continue;
+    for (const element of rootsToInspect) {
       if (element === container || element.contains?.(container)) return null;
 
       children.forEach((child, index) => {

@@ -285,7 +285,7 @@ async function runMathRepairTests(browser) {
       container.appendChild(paragraph);
       return paragraph;
     });
-    globalThis.ELMMathFixerRuntime.scan([paragraphs[0]], false);
+    globalThis.ELMMathFixerRuntime.scan([container, paragraphs[0]], false);
     return {
       nearRendered: paragraphs[0].querySelectorAll('.katex').length,
       farRendered: paragraphs[29].querySelectorAll('.katex').length
@@ -300,19 +300,53 @@ async function runMathRepairTests(browser) {
     late.id = 'late-inline';
     late.textContent = 'Later: $z_2$.';
     document.querySelector('#single-line-cases').appendChild(late);
+
+    const streamed = document.createElement('p');
+    streamed.id = 'streamed-inline';
+    streamed.textContent = 'Streaming: $\\kappa';
+    document.querySelector('#single-line-cases').appendChild(streamed);
+    streamed.textContent = 'Streaming: $\\kappa_1(u)$.';
   });
   await page.waitForTimeout(700);
 
   const afterMutation = await page.evaluate(() => ({
     setextBlocks: document.querySelectorAll('#setext-case > .elm-math-rescued-block').length,
     lateRendered: document.querySelectorAll('#late-inline .katex').length,
+    streamedRendered: document.querySelectorAll('#streamed-inline .katex').length,
     mixedLocalChains: document.querySelectorAll('#mixed-valid-and-mispaired > .elm-math-local-chain').length,
     mixedValidMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-rescued-text .katex').length
   }));
   assert(afterMutation.setextBlocks === 1, 'repeated scanning duplicated a display formula');
   assert(afterMutation.lateRendered > 0, 'incrementally added math was not processed');
+  assert(afterMutation.streamedRendered > 0,
+    'a rapidly replaced streaming node was missed by incremental scanning');
   assert(afterMutation.mixedLocalChains === 1 && afterMutation.mixedValidMath === 2,
     'repeated scanning duplicated or skipped mixed local math repairs');
+
+  await page.evaluate(() => {
+    globalThis.__elmOriginalIsFixerEnabled = globalThis.ELMMathFixerUI.isFixerEnabled;
+    globalThis.ELMMathFixerUI.isFixerEnabled = () => false;
+    const cached = document.createElement('section');
+    cached.id = 'cached-history-chat';
+    cached.className = 'markdown';
+    cached.hidden = true;
+    cached.innerHTML = '<p>Cached history: $\\kappa_1(u)$.</p>';
+    document.querySelector('main').appendChild(cached);
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    globalThis.ELMMathFixerUI.isFixerEnabled = globalThis.__elmOriginalIsFixerEnabled;
+    delete globalThis.__elmOriginalIsFixerEnabled;
+    const cached = document.querySelector('#cached-history-chat');
+    cached.hidden = false;
+    cached.querySelector('p').appendChild(document.createTextNode(' Restored.'));
+  });
+  await page.waitForTimeout(1100);
+  const cachedHistoryRendered = await page.evaluate(() =>
+    document.querySelectorAll('#cached-history-chat .katex').length
+  );
+  assert(cachedHistoryRendered > 0,
+    'showing a cached chat through an attribute-only change did not trigger math repair');
 
   await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
   await page.waitForTimeout(100);

@@ -4,6 +4,14 @@
   const CONTAINER_SELECTOR = '.markdown, .markdown-container, .response-ai, .message-content';
   const DEBUG = false;
   const SCAN_DELAY_MS = 180;
+  const SETTLE_SCAN_DELAY_MS = 700;
+  const OBSERVER_OPTIONS = {
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['class', 'hidden', 'style', 'aria-hidden'],
+    subtree: true
+  };
   const MATH_REPAIR = globalThis.ELMMathFixerRepair;
   const UI = globalThis.ELMMathFixerUI;
 
@@ -84,22 +92,61 @@
   }
 
   let debounceTimer = null;
+  let settleTimer = null;
   const pendingScanRoots = new Set();
   let pendingUiRefresh = false;
+  let pendingSettleScan = false;
+  let pendingFullScan = false;
+  let lastObservedUrl = location.href;
 
   function isInsideMathContent(node) {
     const element = getRootElement(node);
     return Boolean(element?.closest?.(CONTAINER_SELECTOR));
   }
 
+  function affectsMathVisibility(node) {
+    const element = getRootElement(node);
+    return Boolean(
+      element?.matches?.(CONTAINER_SELECTOR) ||
+      element?.closest?.(CONTAINER_SELECTOR) ||
+      element?.querySelector?.(CONTAINER_SELECTOR)
+    );
+  }
+
+  function affectsMathContainerBoundary(node) {
+    const element = getRootElement(node);
+    return Boolean(
+      element?.matches?.(CONTAINER_SELECTOR) ||
+      element?.querySelector?.(CONTAINER_SELECTOR)
+    );
+  }
+
+  function observePage() {
+    observer.observe(document.body, OBSERVER_OPTIONS);
+  }
+
   const observer = new MutationObserver((mutations) => {
+    clearTimeout(settleTimer);
+    if (location.href !== lastObservedUrl) {
+      lastObservedUrl = location.href;
+      pendingFullScan = true;
+      pendingSettleScan = true;
+    }
+
     mutations.forEach((mutation) => {
-      if (mutation.type === 'characterData') {
-        pendingScanRoots.add(mutation.target);
-      } else if (mutation.addedNodes.length > 0) {
+      pendingScanRoots.add(mutation.target);
+      if (mutation.addedNodes.length > 0) {
         mutation.addedNodes.forEach((node) => pendingScanRoots.add(node));
-      } else {
-        pendingScanRoots.add(mutation.target);
+      }
+      if (mutation.type === 'attributes' && affectsMathVisibility(mutation.target)) {
+        pendingSettleScan = true;
+        if (
+          mutation.attributeName === 'hidden' ||
+          mutation.attributeName === 'aria-hidden' ||
+          affectsMathContainerBoundary(mutation.target)
+        ) {
+          pendingFullScan = true;
+        }
       }
 
       if (!isInsideMathContent(mutation.target)) pendingUiRefresh = true;
@@ -110,18 +157,32 @@
 
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      const roots = Array.from(pendingScanRoots);
+      const roots = pendingFullScan ? [document] : Array.from(pendingScanRoots);
+      const shouldSettle = pendingSettleScan;
       pendingScanRoots.clear();
       const refreshUi =
         pendingUiRefresh ||
         !document.getElementById(UI.promptButtonId) ||
         !document.getElementById(UI.fixerToggleId);
       pendingUiRefresh = false;
+      pendingFullScan = false;
+      pendingSettleScan = false;
       observer.disconnect();
       try {
         scan(roots, refreshUi);
       } finally {
-        observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+        observePage();
+      }
+
+      if (shouldSettle) {
+        settleTimer = setTimeout(() => {
+          observer.disconnect();
+          try {
+            scan(roots, false);
+          } finally {
+            observePage();
+          }
+        }, SETTLE_SCAN_DELAY_MS);
       }
     }, SCAN_DELAY_MS);
   });
@@ -129,5 +190,5 @@
   globalThis.ELMMathFixerRuntime = { scan };
   log('runtime module loaded');
   scan();
-  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+  observePage();
 })();
