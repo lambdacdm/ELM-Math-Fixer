@@ -1,10 +1,20 @@
 # ELM Math Fixer
 
-ELM Math Fixer is a small Chrome extension that improves KaTeX math rendering on the University of Edinburgh ELM platform.
+ELM Math Fixer is a small Chrome extension that improves KaTeX math rendering on the University of Edinburgh [ELM platform](https://elm.edina.ac.uk/).
 
 It is designed to be used together with a short ELM prompt rule that prevents AI-generated display formulas from being split by Markdown before KaTeX can render them.
 
+Bundled KaTeX version: [0.17.0](https://github.com/KaTeX/KaTeX). This matches the version currently declared by the upstream `main` source.
+
 This project was developed with GPT-5.6 Sol, Claude Sonnet 5, and Gemini 3.5 Flash.
+
+ELM Math Fixer 是一个小型 Chrome 扩展，用于改善爱丁堡大学 [ELM 平台](https://elm.edina.ac.uk/)上的 KaTeX 数学公式渲染。
+
+它需要配合一条简短的 ELM 提示词规则使用，以免 AI 生成的行间公式在 KaTeX 渲染前被 Markdown 拆分。
+
+内置 KaTeX 版本：[0.17.0](https://github.com/KaTeX/KaTeX)。该版本与 KaTeX 上游仓库当前 `main` 源码声明的版本一致。
+
+本项目由 GPT-5.6 Sol、Claude Sonnet 5 和 Gemini 3.5 Flash 协助开发。
 
 <p>
   <a href="#english">English</a> |
@@ -50,7 +60,7 @@ This extension runs only on `https://elm.edina.ac.uk/`. It does not collect, sto
 
 </details>
 
-<details>
+<details open>
 <summary id="中文"><strong>中文</strong></summary>
 
 ## 这个插件解决什么
