@@ -11,7 +11,7 @@ ELM Math Fixer is a small Chrome extension that improves KaTeX math rendering on
 
 The extension is a complete standalone solution for known common rendering failures. The optional prompt is only a partial aid.
 
-Extension version: 1.0.6.
+Extension version: 1.0.7.
 
 Bundled KaTeX version: [0.17.0](https://github.com/KaTeX/KaTeX). This matches the version currently declared by the upstream `main` source.
 
@@ -56,7 +56,7 @@ ELM Math Fixer 是一个小型 Chrome 扩展，用于改善爱丁堡大学 [ELM 
 
 插件可独立完整修复已知的常见渲染问题；提示词仅为可选的辅助方案，只能解决部分问题。
 
-插件版本：1.0.6。
+插件版本：1.0.7。
 
 内置 KaTeX 版本：[0.17.0](https://github.com/KaTeX/KaTeX)。该版本与 KaTeX 上游仓库当前 `main` 源码声明的版本一致。
 

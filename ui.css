@@ -1,0 +1,533 @@
+.elm-math-rescued-container {
+  align-self: stretch;
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+.elm-math-rescued-block {
+  align-self: stretch;
+  box-sizing: border-box;
+  display: block;
+  max-width: 100%;
+  width: 100%;
+}
+
+.elm-math-rescued-block .katex-display {
+  text-align: center;
+  width: 100%;
+}
+
+#elm-math-fixer-prompt-button {
+  align-items: center;
+  background: var(--elm-mf-accent, #2f6f59);
+  border: 1px solid var(--elm-mf-accent, #2f6f59);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font: 600 14px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  gap: 6px;
+  min-height: 34px;
+  margin: 0 8px 0 0;
+  padding: 7px 11px;
+  position: static;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  z-index: 2147483646;
+}
+
+#elm-math-fixer-prompt-button:hover {
+  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 88%, black);
+  border-color: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 88%, black);
+}
+
+#elm-math-fixer-prompt-button.elm-mf-sidebar {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--elm-mf-accent, #2f6f59);
+  display: flex;
+  justify-content: flex-start;
+  margin: 0;
+  max-width: 100%;
+  position: static;
+  text-align: left;
+  width: 100%;
+  z-index: auto;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-sidebar:hover {
+  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 9%, transparent);
+  border-color: transparent;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-sidebar.elm-mf-attention {
+  animation: elm-mf-sidebar-pulse 1.4s ease-in-out infinite;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-sidebar .elm-mf-launcher-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-sidebar .elm-mf-launcher-label {
+  display: inline;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar {
+  align-items: center;
+  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 8%, white);
+  border: 1px solid var(--elm-mf-accent, #2f6f59);
+  border-radius: 8px;
+  box-sizing: border-box;
+  box-shadow: none;
+  color: var(--elm-mf-accent, #2f6f59);
+  display: flex;
+  justify-content: center;
+  position: static;
+  text-align: center;
+  z-index: auto;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar:hover {
+  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 16%, white);
+  border-color: var(--elm-mf-accent, #2f6f59);
+}
+
+#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar.elm-mf-attention {
+  animation: elm-mf-sidebar-pulse 1.4s ease-in-out infinite;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar .elm-mf-launcher-icon,
+#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar .elm-mf-launcher-label {
+  display: inline-flex;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-hidden {
+  display: none !important;
+}
+
+#elm-math-fixer-tools-guide {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--elm-mf-accent, #2f6f59);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  color: #1f2933;
+  display: flex;
+  font: 500 14px/1.3 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  gap: 10px;
+  max-width: min(330px, calc(100vw - 32px));
+  padding: 8px 10px;
+  position: fixed;
+  z-index: 2147483647;
+}
+
+#elm-math-fixer-tools-guide .elm-mf-guide-open {
+  background: var(--elm-mf-accent, #2f6f59);
+  border: 1px solid var(--elm-mf-accent, #2f6f59);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: 650 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 6px 9px;
+}
+
+#elm-math-fixer-tools-guide .elm-mf-guide-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #c62828;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: 700 22px/1 system-ui, sans-serif;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  width: 26px;
+}
+
+.elm-mf-tools-attention {
+  animation: elm-mf-tools-pulse 1.2s ease-in-out infinite !important;
+}
+
+#elm-math-fixer-toggle {
+  appearance: none;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  height: 30px;
+  justify-content: center;
+  margin: 0 28px 0 0;
+  min-height: 30px;
+  padding: 0;
+  position: static;
+  flex: 0 0 auto;
+  width: auto;
+  z-index: 2147483646;
+}
+
+#elm-math-fixer-toggle:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 30%, transparent);
+  outline-offset: 3px;
+}
+
+#elm-math-fixer-toggle .elm-mf-switch-label {
+  color: #1f2933;
+  font: 500 16px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: nowrap;
+}
+
+#elm-math-fixer-toggle .elm-mf-switch-track {
+  align-items: center;
+  background: var(--elm-mf-accent, #2f6f59);
+  border-radius: 999px;
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  display: flex;
+  height: 30px;
+  padding: 3px;
+  transition: background-color 160ms ease;
+  width: 52px;
+}
+
+#elm-math-fixer-toggle .elm-mf-switch-thumb {
+  align-items: center;
+  background: #f7fbf9;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+  color: var(--elm-mf-accent, #2f6f59);
+  display: flex;
+  font: 800 14px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  height: 24px;
+  justify-content: center;
+  transform: translateX(22px);
+  transition: color 160ms ease, transform 160ms ease;
+  width: 24px;
+}
+
+#elm-math-fixer-toggle .elm-mf-switch-thumb::after {
+  content: "\2713";
+}
+
+#elm-math-fixer-toggle:hover .elm-mf-switch-track {
+  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 88%, black);
+}
+
+#elm-math-fixer-toggle[data-enabled="false"] .elm-mf-switch-track {
+  background: var(--elm-mf-off-track, #dce3df);
+  box-shadow: inset 0 0 0 1px var(--elm-mf-off-border, #829188);
+}
+
+#elm-math-fixer-toggle[data-enabled="false"] .elm-mf-switch-thumb {
+  background: var(--elm-mf-off-thumb, #748178);
+  color: var(--elm-mf-off-icon, #dfe5e1);
+  transform: translateX(0);
+}
+
+#elm-math-fixer-toggle[data-enabled="false"] .elm-mf-switch-thumb::after {
+  content: "\2212";
+}
+
+#elm-math-fixer-toggle[data-enabled="false"]:hover .elm-mf-switch-track {
+  background: color-mix(in srgb, var(--elm-mf-off-track, #dce3df) 90%, black);
+}
+
+#elm-math-fixer-toggle .elm-mf-power-icon {
+  display: none;
+}
+
+#elm-math-fixer-toggle.elm-mf-fallback {
+  margin: 0;
+  position: fixed;
+}
+
+#elm-math-fixer-toggle.elm-mf-compact {
+  border: 1px solid var(--elm-mf-accent, #2f6f59);
+  border-radius: 8px;
+  color: var(--elm-mf-accent, #2f6f59);
+  height: 42px;
+  min-height: 42px;
+  width: 42px;
+}
+
+#elm-math-fixer-toggle.elm-mf-compact[data-enabled="false"] {
+  border-color: var(--elm-mf-off-border, #829188);
+  color: var(--elm-mf-off-thumb, #748178);
+}
+
+#elm-math-fixer-toggle.elm-mf-compact .elm-mf-switch-label,
+#elm-math-fixer-toggle.elm-mf-compact .elm-mf-switch-track {
+  display: none;
+}
+
+#elm-math-fixer-toggle.elm-mf-compact .elm-mf-power-icon {
+  display: inline;
+  font: 600 23px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Symbol", sans-serif;
+}
+
+.elm-mf-launcher-icon {
+  display: none;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.elm-mf-launcher-label {
+  display: inline;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-attention {
+  animation: elm-mf-pulse 1.4s ease-in-out infinite;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-fallback {
+  margin: 0;
+  position: fixed;
+  right: 30px;
+  top: 22px;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-compact {
+  background: transparent;
+  border-color: var(--elm-mf-accent, #2f6f59);
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--elm-mf-accent, #2f6f59);
+  height: 42px;
+  justify-content: center;
+  margin: 0 12px 0 0;
+  min-height: 42px;
+  padding: 0;
+  width: 42px;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-compact:hover {
+  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 10%, transparent);
+  border-color: var(--elm-mf-accent, #2f6f59);
+  color: var(--elm-mf-accent, #2f6f59);
+}
+
+#elm-math-fixer-prompt-button.elm-mf-compact .elm-mf-launcher-icon {
+  display: inline;
+  font-size: 16px;
+}
+
+#elm-math-fixer-prompt-button.elm-mf-compact .elm-mf-launcher-label {
+  display: none;
+}
+
+.elm-mf-try-new-look-group {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+@keyframes elm-mf-pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 0 0 color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 55%, transparent);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18), 0 0 0 7px color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 0%, transparent);
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes elm-mf-sidebar-pulse {
+  0%, 100% {
+    background: transparent;
+    box-shadow: none;
+  }
+  50% {
+    background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 12%, transparent);
+    box-shadow: none;
+  }
+}
+
+@keyframes elm-mf-tools-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 0%, transparent);
+  }
+}
+
+#elm-math-fixer-prompt-panel {
+  background: #fff;
+  border: 1px solid rgba(47, 111, 89, 0.22);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  color: #1f2933;
+  font: 15px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px;
+  position: fixed;
+  width: 390px;
+  z-index: 2147483647;
+}
+
+#elm-math-fixer-prompt-panel[hidden] {
+  display: none;
+}
+
+.elm-mf-panel-title {
+  align-items: center;
+  display: flex;
+  font-size: 17px;
+  font-weight: 700;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.elm-mf-help {
+  background: #f4f8f6;
+  border: 1px solid #d9e8e0;
+  border-radius: 8px;
+  color: #3f4e58;
+  font-size: 13px;
+  margin-bottom: 8px;
+  padding: 8px 9px;
+}
+
+.elm-mf-close {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #c62828;
+  cursor: pointer;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  min-height: 34px;
+  min-width: 34px;
+  padding: 0 5px 3px;
+}
+
+.elm-mf-close:hover {
+  background: #fde7e7;
+  color: #a61717;
+}
+
+.elm-mf-prompt {
+  border-top: 1px solid #e7ecef;
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.elm-mf-prompt:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.elm-mf-prompt-title {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.elm-mf-prompt-desc {
+  color: #52616b;
+  font-size: 13px;
+}
+
+.elm-mf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.elm-mf-copy {
+  background: #eef6f2;
+  border: 1px solid #b8d5c7;
+  border-radius: 7px;
+  color: #2f6f59;
+  cursor: pointer;
+  font: 650 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
+.elm-mf-copy:hover {
+  background: #dfeee7;
+}
+
+@media (max-width: 1120px) {
+  #elm-math-fixer-prompt-button {
+    background: transparent;
+    border-color: var(--elm-mf-accent, #2f6f59);
+    border-radius: 8px;
+    box-shadow: none;
+    color: var(--elm-mf-accent, #2f6f59);
+    height: 42px;
+    justify-content: center;
+    margin: 0 12px 0 0;
+    min-height: 42px;
+    padding: 0;
+    width: 42px;
+  }
+
+  #elm-math-fixer-prompt-button:hover {
+    background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 10%, transparent);
+    border-color: var(--elm-mf-accent, #2f6f59);
+    color: var(--elm-mf-accent, #2f6f59);
+  }
+
+  #elm-math-fixer-prompt-button .elm-mf-launcher-icon {
+    display: inline;
+    font-size: 16px;
+  }
+
+  #elm-math-fixer-prompt-button .elm-mf-launcher-label {
+    display: none;
+  }
+
+  #elm-math-fixer-toggle {
+    border: 1px solid var(--elm-mf-accent, #2f6f59);
+    border-radius: 8px;
+    color: var(--elm-mf-accent, #2f6f59);
+    height: 42px;
+    margin: 0 12px 0 0;
+    min-height: 42px;
+    width: 42px;
+  }
+
+  #elm-math-fixer-toggle:hover {
+    background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 10%, transparent);
+  }
+
+  #elm-math-fixer-toggle[data-enabled="false"] {
+    border-color: var(--elm-mf-off-border, #829188);
+    color: var(--elm-mf-off-thumb, #748178);
+  }
+
+  #elm-math-fixer-toggle[data-enabled="false"]:hover {
+    background: color-mix(in srgb, var(--elm-mf-off-track, #dce3df) 45%, transparent);
+  }
+
+  #elm-math-fixer-toggle .elm-mf-switch-label,
+  #elm-math-fixer-toggle .elm-mf-switch-track {
+    display: none;
+  }
+
+  #elm-math-fixer-toggle .elm-mf-power-icon {
+    display: inline;
+    font: 600 23px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Symbol", sans-serif;
+  }
+}

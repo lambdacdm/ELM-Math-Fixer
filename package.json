@@ -1,0 +1,13 @@
+{
+  "name": "elm-math-fixer",
+  "version": "1.0.7",
+  "private": true,
+  "scripts": {
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./build.ps1",
+    "check": "node --check math-repair.js && node --check prompts.js && node --check content.js && node --check tests/browser.test.js && node --check tests/metadata.test.js && node tests/metadata.test.js",
+    "test": "node tests/browser.test.js"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}
