@@ -1058,7 +1058,7 @@
 
     const help = document.createElement('div');
     help.className = 'elm-mf-help';
-    help.textContent = 'Copy a prompt, then open Prompts in the left-hand Tools sidebar, add a new prompt, paste it, and save. Prompts are optional, partial aids; the extension is a complete standalone solution.';
+    help.textContent = 'Copy a prompt, then open Prompts in the left-hand Tools sidebar, add a new prompt, paste it, and save. For best results, use the Math Rendering Fix prompt alongside the extension, although it is not required.';
     panel.appendChild(help);
 
     PROMPT_GROUPS.forEach((group) => {
