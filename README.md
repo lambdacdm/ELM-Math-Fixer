@@ -4,7 +4,7 @@ ELM Math Fixer is a small Chrome extension that improves KaTeX math rendering on
 
 It is designed to be used together with a short ELM prompt rule that prevents AI-generated display formulas from being split by Markdown before KaTeX can render them.
 
-This project was developed with GPT-5.5, Claude Sonnet 5, and Gemini 3.5 Flash.
+This project was developed with GPT-5.6 Sol, Claude Sonnet 5, and Gemini 3.5 Flash.
 
 <p>
   <a href="#english">English</a> |

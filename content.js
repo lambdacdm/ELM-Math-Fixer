@@ -5,9 +5,12 @@
   const TARGET_ELEMENTS = 'p, li, h1, h2, h3, h4, h5, h6';
   const DEBUG = false;
   const PROMPT_BUTTON_ID = 'elm-math-fixer-prompt-button';
+  const FIXER_TOGGLE_ID = 'elm-math-fixer-toggle';
   const PROMPT_PANEL_ID = 'elm-math-fixer-prompt-panel';
   const PROMPT_STYLE_ID = 'elm-math-fixer-prompt-style';
   const PROMPT_SEEN_STORAGE_KEY = 'elmMathFixerPromptButtonClicked';
+  const FIXER_ENABLED_STORAGE_KEY = 'elmMathFixerEnabled';
+  let fixerEnabledFallback = true;
 
   const PROMPT_GROUPS = [
     {
@@ -60,35 +63,363 @@ After that blockquote, output the final answer.`
     if (DEBUG) console.warn('[ELM Math Fixer]', ...args);
   };
 
+  function isFixerEnabled() {
+    try {
+      const stored = localStorage.getItem(FIXER_ENABLED_STORAGE_KEY);
+      return stored === null ? fixerEnabledFallback : stored !== 'false';
+    } catch {
+      return fixerEnabledFallback;
+    }
+  }
+
+  function setFixerEnabled(enabled) {
+    fixerEnabledFallback = enabled;
+    try {
+      localStorage.setItem(FIXER_ENABLED_STORAGE_KEY, String(enabled));
+    } catch {
+      // The current page may block storage; the default enabled state remains usable.
+    }
+  }
+
   const hasMath = (text) => text.includes('$') || text.includes('\\(') || text.includes('\\[');
+
+  const MULTILINE_MATH_ENVIRONMENTS = new Set([
+    'align',
+    'aligned',
+    'alignedat',
+    'alignat',
+    'array',
+    'bmatrix',
+    'Bmatrix',
+    'cases',
+    'dcases',
+    'flalign',
+    'gather',
+    'gathered',
+    'matrix',
+    'multline',
+    'pmatrix',
+    'rcases',
+    'split',
+    'Vmatrix',
+    'vmatrix'
+  ]);
+  const KNOWN_LATEX_COMMAND_CACHE = new Map();
+
+  function isMultilineMathEnvironment(name) {
+    return MULTILINE_MATH_ENVIRONMENTS.has(name.replace(/\*$/, ''));
+  }
+
+  function isKnownLatexCommand(command) {
+    if (KNOWN_LATEX_COMMAND_CACHE.has(command)) {
+      return KNOWN_LATEX_COMMAND_CACHE.get(command);
+    }
+
+    const parser = globalThis.katex;
+    if (!parser || typeof parser.__parse !== 'function') return false;
+
+    let isKnown = false;
+    try {
+      parser.__parse(`\\${command}`, { strict: 'ignore' });
+      isKnown = true;
+    } catch (error) {
+      isKnown =
+        error instanceof parser.ParseError &&
+        !String(error.message).includes('Undefined control sequence');
+    }
+
+    KNOWN_LATEX_COMMAND_CACHE.set(command, isKnown);
+    return isKnown;
+  }
+
+  function normalizeLatexBackslashes(source) {
+    return source.replace(
+      /(?<!\\)\\{2}(?=([A-Za-z]+))/g,
+      (backslashes, command) => (isKnownLatexCommand(command) ? '\\' : backslashes)
+    );
+  }
+
+  function hasUnresolvedDoubledBackslash(source) {
+    const environmentPattern = /\\+(begin|end)\{([^{}]+)\}/g;
+    const environmentStack = [];
+    let cursor = 0;
+    let match;
+
+    const hasUnsafeSegment = (segment) =>
+      !environmentStack.some(isMultilineMathEnvironment) && /\\{2,}(?=\S)/.test(segment);
+
+    while ((match = environmentPattern.exec(source)) !== null) {
+      if (hasUnsafeSegment(source.slice(cursor, match.index))) return true;
+
+      const [, command, environmentName] = match;
+      if (command === 'begin') {
+        environmentStack.push(environmentName);
+      } else {
+        const matchingIndex = environmentStack.lastIndexOf(environmentName);
+        if (matchingIndex !== -1) environmentStack.splice(matchingIndex, 1);
+      }
+
+      cursor = environmentPattern.lastIndex;
+    }
+
+    return hasUnsafeSegment(source.slice(cursor));
+  }
+
+  function normalizeMathBackslashes(text) {
+    const mathSegmentPattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\r\n]*?\$/g;
+
+    return text.replace(mathSegmentPattern, (segment) => {
+      if (segment.startsWith('$$')) {
+        return `$$${normalizeLatexBackslashes(segment.slice(2, -2))}$$`;
+      }
+
+      if (segment.startsWith('\\[') || segment.startsWith('\\(')) {
+        return `${segment.slice(0, 2)}${normalizeLatexBackslashes(segment.slice(2, -2))}${segment.slice(-2)}`;
+      }
+
+      return `$${normalizeLatexBackslashes(segment.slice(1, -1))}$`;
+    });
+  }
+
+  function getCodeWrappedMathText(code) {
+    if (
+      code.closest(
+        'pre, .elm-math-hidden-original, .elm-math-rescued-block, .elm-math-rescued-code, .elm-math-rescued-wrapper'
+      )
+    ) {
+      return null;
+    }
+
+    const text = (code.textContent || '').trim();
+    const isDelimitedMath =
+      /^\$\$[\s\S]+\$\$$/.test(text) ||
+      /^\$(?!\$)[^$\r\n]+\$$/.test(text) ||
+      /^\\\[[\s\S]+\\\]$/.test(text) ||
+      /^\\\([\s\S]+\\\)$/.test(text);
+
+    if (!isDelimitedMath) return null;
+    return text.replace(/\$\s+/g, '$').replace(/\s+\$/g, '$');
+  }
+
+  function rescueCodeWrappedMath(container) {
+    container.querySelectorAll('code').forEach((code) => {
+      const mathText = getCodeWrappedMathText(code);
+      if (!mathText) return;
+
+      const rendered = document.createElement('span');
+      rendered.className = 'elm-math-rescued-code-rendered';
+      rendered.textContent = mathText;
+
+      try {
+        renderMathInto(rendered);
+        if (!rendered.querySelector('.katex') || rendered.querySelector('.katex-error')) return;
+
+        const host = document.createElement('span');
+        host.className = 'elm-math-rescued-code';
+        host.dataset.rawText = code.textContent || '';
+        code.dataset.elmMathOriginalDisplay = code.style.display;
+        code.classList.add('elm-math-code-original');
+        code.style.display = 'none';
+        code.replaceWith(host);
+        host.appendChild(code);
+        host.appendChild(rendered);
+      } catch (error) {
+        warn('failed to render code-wrapped math:', error);
+      }
+    });
+  }
+
+  function isEscapedAt(text, index) {
+    let backslashCount = 0;
+    for (let i = index - 1; i >= 0 && text[i] === '\\'; i--) backslashCount++;
+    return backslashCount % 2 === 1;
+  }
+
+  function getMathSegmentDetails(segment) {
+    if (segment.startsWith('$$')) {
+      return { body: segment.slice(2, -2), displayMode: true };
+    }
+
+    if (segment.startsWith('\\[')) {
+      return { body: segment.slice(2, -2), displayMode: true };
+    }
+
+    if (segment.startsWith('\\(')) {
+      return { body: segment.slice(2, -2), displayMode: false };
+    }
+
+    return { body: segment.slice(1, -1), displayMode: false };
+  }
+
+  function isSafeMixedTextMath(text) {
+    const parser = globalThis.katex;
+    if (!parser || typeof parser.__parse !== 'function') return false;
+
+    const segmentPattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
+    let foundMath = false;
+    let match;
+
+    while ((match = segmentPattern.exec(text)) !== null) {
+      const segment = match[0];
+      const closingIndex = match.index + segment.length - 1;
+      const isSingleDollar = segment.startsWith('$') && !segment.startsWith('$$');
+      if (
+        segment.startsWith('$') &&
+        (isEscapedAt(text, match.index) || isEscapedAt(text, closingIndex))
+      ) {
+        return false;
+      }
+
+      const { body, displayMode } = getMathSegmentDetails(segment);
+      const trimmedBody = body.trim();
+      if (!trimmedBody) return false;
+
+      // Avoid treating two currency amounts such as "$5 and $10" as one formula.
+      const followingCharacter = text[match.index + segment.length] || '';
+      if (isSingleDollar && /^\d/.test(trimmedBody) && /^\d/.test(followingCharacter)) {
+        return false;
+      }
+
+      const normalizedSegment = normalizeMathBackslashes(segment);
+      const normalizedBody = getMathSegmentDetails(normalizedSegment).body;
+      if (hasUnresolvedDoubledBackslash(normalizedBody)) return false;
+
+      try {
+        parser.__parse(normalizedBody, { displayMode, strict: 'error' });
+      } catch {
+        return false;
+      }
+
+      foundMath = true;
+    }
+
+    return foundMath;
+  }
+
+  function rescueMixedTextMath(el) {
+    const ignoredSelector = [
+      'code',
+      'pre',
+      '.katex',
+      '.elm-math-hidden-original',
+      '.elm-math-rescued-block',
+      '.elm-math-rescued-code',
+      '.elm-math-rescued-text',
+      '.elm-math-rescued-wrapper'
+    ].join(', ');
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const candidates = [];
+    let node;
+
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest(ignoredSelector)) continue;
+      if (isSafeMixedTextMath(node.textContent || '')) candidates.push(node);
+    }
+
+    candidates.forEach((textNode) => {
+      const wrapper = document.createElement('span');
+      wrapper.textContent = textNode.textContent || '';
+
+      try {
+        renderMathInto(wrapper);
+        if (!wrapper.querySelector('.katex') || wrapper.querySelector('.katex-error')) return;
+
+        const host = document.createElement('span');
+        host.className = 'elm-math-rescued-text';
+        host.dataset.rawText = textNode.textContent || '';
+        while (wrapper.firstChild) host.appendChild(wrapper.firstChild);
+        textNode.replaceWith(host);
+      } catch (error) {
+        warn('failed to render mixed text math:', error);
+      }
+    });
+  }
 
   function hasNativeRenderedMath(el) {
     const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
     return !wrapper && Boolean(el.querySelector('.katex, .katex-display'));
   }
 
-  // ELM appears to parse Markdown before KaTeX. In math text, that can turn
-  // subscript underscores into <em>/<strong> markup and remove the original
-  // underscore characters. Clone the DOM and reverse that local Markdown markup
-  // before handing the text back to KaTeX.
-  function getMathAwareText(el) {
-    const raw = el.textContent || '';
-    if (!hasMath(raw)) return raw;
+  function getMathBodyRanges(text) {
+    const segmentPattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
+    const ranges = [];
+    let match;
 
+    while ((match = segmentPattern.exec(text)) !== null) {
+      const delimiterLength = match[0].startsWith('$$') ? 2 : match[0].startsWith('$') ? 1 : 2;
+      ranges.push({
+        start: match.index + delimiterLength,
+        end: match.index + match[0].length - delimiterLength
+      });
+    }
+
+    return ranges;
+  }
+
+  // Reverse Markdown emphasis only when it sits inside a math-delimited range.
+  // Genuine prose emphasis remains as DOM markup and keeps its visual styling.
+  function getMathAwareClone(el) {
     const clone = el.cloneNode(true);
+    const fullText = clone.textContent || '';
+    if (!hasMath(fullText)) return clone;
 
-    clone.querySelectorAll('em, i').forEach((node) => {
-      node.replaceWith(document.createTextNode(`_${node.textContent}_`));
+    const mathRanges = getMathBodyRanges(fullText);
+    const emphasisNodes = Array.from(clone.querySelectorAll('em, i, strong, b')).filter(
+      (node) => !node.parentElement?.closest('em, i, strong, b')
+    );
+    const positionedNodes = emphasisNodes.map((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(clone);
+      range.setEndBefore(node);
+      const start = range.toString().length;
+      return { node, start, end: start + (node.textContent || '').length };
     });
 
-    clone.querySelectorAll('strong, b').forEach((node) => {
-      node.replaceWith(document.createTextNode(`__${node.textContent}__`));
+    positionedNodes.forEach(({ node, start, end }) => {
+      const isInsideMath = mathRanges.some(
+        (mathRange) => start >= mathRange.start && end <= mathRange.end
+      );
+      if (!isInsideMath) return;
+
+      const marker = node.matches('strong, b') ? '__' : '_';
+      node.replaceWith(document.createTextNode(`${marker}${node.textContent}${marker}`));
     });
 
-    return clone.textContent || '';
+    clone.normalize();
+    return clone;
+  }
+
+  function getMathAwareText(el) {
+    return getMathAwareClone(el).textContent || '';
+  }
+
+  function cleanMathClone(clone) {
+    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    let node;
+
+    while ((node = walker.nextNode())) textNodes.push(node);
+    textNodes.forEach((textNode) => {
+      textNode.textContent = (textNode.textContent || '')
+        .replace(/\$\s+/g, '$')
+        .replace(/\s+\$/g, '$');
+    });
+    clone.normalize();
+    return clone;
   }
 
   function renderMathInto(el) {
+    el.normalize();
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    let node;
+
+    while ((node = walker.nextNode())) textNodes.push(node);
+    textNodes.forEach((textNode) => {
+      const normalizedText = normalizeMathBackslashes(textNode.textContent || '');
+      if (normalizedText !== textNode.textContent) textNode.textContent = normalizedText;
+    });
+
     renderMathInElement(el, {
       delimiters: [
         { left: '$$', right: '$$', display: true },
@@ -106,9 +437,60 @@ After that blockquote, output the final answer.`
     }
     hiddenOriginal.remove();
     if (wrapper) wrapper.remove();
+    if ('elmMathOriginalDisplay' in el.dataset) {
+      el.style.display = el.dataset.elmMathOriginalDisplay;
+      delete el.dataset.elmMathOriginalDisplay;
+    }
+  }
+
+  function hideSplitOriginal(el) {
+    if (!el.classList.contains('elm-math-split-original')) {
+      el.dataset.elmMathOriginalDisplay = el.style.display;
+      el.classList.add('elm-math-split-original');
+    }
+    el.style.display = 'none';
+  }
+
+  function restoreSplitOriginal(el) {
+    el.style.display = el.dataset.elmMathOriginalDisplay || '';
+    delete el.dataset.elmMathOriginalDisplay;
+    el.classList.remove('elm-math-split-original');
+  }
+
+  function restoreAllRescuedMath() {
+    document.querySelectorAll('.elm-math-hidden-original').forEach((hiddenOriginal) => {
+      const el = hiddenOriginal.parentElement;
+      if (!el) return;
+      const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
+      restoreSingleLineElement(el, hiddenOriginal, wrapper);
+    });
+
+    document.querySelectorAll('.elm-math-rescued-code').forEach((host) => {
+      const original = host.querySelector(':scope > code.elm-math-code-original');
+      if (original) {
+        original.style.display = original.dataset.elmMathOriginalDisplay || '';
+        delete original.dataset.elmMathOriginalDisplay;
+        original.classList.remove('elm-math-code-original');
+        host.replaceWith(original);
+        return;
+      }
+
+      const fallback = document.createElement('code');
+      fallback.textContent = host.dataset.rawText || '';
+      host.replaceWith(fallback);
+    });
+
+    document.querySelectorAll('.elm-math-rescued-text').forEach((host) => {
+      host.replaceWith(document.createTextNode(host.dataset.rawText || ''));
+    });
+
+    document.querySelectorAll('.elm-math-rescued-block').forEach((block) => block.remove());
+    document.querySelectorAll('.elm-math-split-original').forEach(restoreSplitOriginal);
   }
 
   function processContainer(container) {
+    rescueCodeWrappedMath(container);
+
     const children = Array.from(container.querySelectorAll(TARGET_ELEMENTS));
     log('matched text elements:', children.length, container);
 
@@ -122,6 +504,7 @@ After that blockquote, output the final answer.`
       }
 
       if (hasNativeRenderedMath(el)) {
+        rescueMixedTextMath(el);
         i++;
         continue;
       }
@@ -176,9 +559,7 @@ After that blockquote, output the final answer.`
             prevSibling.classList.contains('elm-math-rescued-block') &&
             prevSibling.dataset.rawText === combinedText
           ) {
-            group.forEach((node) => {
-              node.style.display = 'none';
-            });
+            group.forEach(hideSplitOriginal);
             i++;
             continue;
           }
@@ -204,9 +585,7 @@ After that blockquote, output the final answer.`
           try {
             renderMathInto(mathBlock);
 
-            group.forEach((node) => {
-              node.style.display = 'none';
-            });
+            group.forEach(hideSplitOriginal);
             group[0].parentNode.insertBefore(mathBlock, group[0]);
           } catch (error) {
             warn('failed to render split display math:', error);
@@ -224,11 +603,12 @@ After that blockquote, output the final answer.`
           restoreSingleLineElement(el, hiddenOriginal, wrapper);
         }
 
-        const freshText = getMathAwareText(el).replace(/\$\s+/g, '$').replace(/\s+\$/g, '$');
+        const freshClone = cleanMathClone(getMathAwareClone(el));
+        const freshText = freshClone.textContent || '';
         const mathWrapper = document.createElement('span');
         mathWrapper.className = 'elm-math-rescued-wrapper';
         mathWrapper.dataset.rawText = freshText;
-        mathWrapper.textContent = freshText;
+        while (freshClone.firstChild) mathWrapper.appendChild(freshClone.firstChild);
 
         try {
           renderMathInto(mathWrapper);
@@ -236,6 +616,7 @@ After that blockquote, output the final answer.`
           const newHiddenOriginal = document.createElement('span');
           newHiddenOriginal.className = 'elm-math-hidden-original';
           newHiddenOriginal.style.display = 'none';
+          el.dataset.elmMathOriginalDisplay = el.style.display;
 
           while (el.firstChild) {
             newHiddenOriginal.appendChild(el.firstChild);
@@ -249,7 +630,6 @@ After that blockquote, output the final answer.`
         }
       } else if (hiddenOriginal) {
         restoreSingleLineElement(el, hiddenOriginal, wrapper);
-        el.style.display = '';
       }
 
       i++;
@@ -257,6 +637,12 @@ After that blockquote, output the final answer.`
   }
 
   function scan() {
+    ensurePromptLauncher();
+    if (!isFixerEnabled()) {
+      restoreAllRescuedMath();
+      return;
+    }
+
     if (typeof renderMathInElement !== 'function') {
       warn('KaTeX auto-render is not available. Check manifest paths.');
       return;
@@ -265,7 +651,6 @@ After that blockquote, output the final answer.`
     const containers = document.querySelectorAll(CONTAINER_SELECTOR);
     log('matched containers:', containers.length);
     containers.forEach(processContainer);
-    ensurePromptLauncher();
   }
 
   function injectPromptStyles() {
@@ -283,7 +668,7 @@ After that blockquote, output the final answer.`
         color: #fff;
         cursor: pointer;
         display: inline-flex;
-        font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 600 14px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         gap: 6px;
         min-height: 34px;
         margin: 0 28px 0 0;
@@ -297,6 +682,67 @@ After that blockquote, output the final answer.`
       #${PROMPT_BUTTON_ID}:hover {
         background: #285f4c;
         border-color: #285f4c;
+      }
+
+      #${FIXER_TOGGLE_ID} {
+        align-items: center;
+        background: #2f6f59;
+        border: 1px solid #2f6f59;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        color: #fff;
+        cursor: pointer;
+        display: inline-flex;
+        font: 650 14px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        justify-content: center;
+        margin: 0 8px 0 0;
+        min-height: 34px;
+        padding: 7px 10px;
+        position: static;
+        flex: 0 0 auto;
+        white-space: nowrap;
+        z-index: 2147483646;
+      }
+
+      #${FIXER_TOGGLE_ID}:hover {
+        background: #285f4c;
+        border-color: #285f4c;
+      }
+
+      #${FIXER_TOGGLE_ID}[data-enabled="false"] {
+        background: #8a4242;
+        border-color: #8a4242;
+      }
+
+      #${FIXER_TOGGLE_ID}[data-enabled="false"]:hover {
+        background: #743636;
+        border-color: #743636;
+      }
+
+      .elm-mf-toggle-short {
+        display: none;
+      }
+
+      #${FIXER_TOGGLE_ID}.elm-mf-fallback {
+        margin: 0;
+        position: fixed;
+      }
+
+      #${FIXER_TOGGLE_ID}.elm-mf-compact {
+        height: 42px;
+        margin: 0;
+        min-height: 42px;
+        padding: 0;
+        width: 42px;
+      }
+
+      #${FIXER_TOGGLE_ID}.elm-mf-compact .elm-mf-toggle-label {
+        display: none;
+      }
+
+      #${FIXER_TOGGLE_ID}.elm-mf-compact .elm-mf-toggle-short {
+        display: inline;
+        font-size: 12px;
       }
 
       .elm-mf-launcher-icon {
@@ -374,7 +820,7 @@ After that blockquote, output the final answer.`
         border-radius: 10px;
         box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
         color: #1f2933;
-        font: 14px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 15px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         max-width: min(420px, calc(100vw - 32px));
         padding: 12px;
         position: fixed;
@@ -389,6 +835,7 @@ After that blockquote, output the final answer.`
       .elm-mf-panel-title {
         align-items: center;
         display: flex;
+        font-size: 17px;
         font-weight: 700;
         justify-content: space-between;
         margin-bottom: 10px;
@@ -399,7 +846,7 @@ After that blockquote, output the final answer.`
         border: 1px solid #d9e8e0;
         border-radius: 8px;
         color: #3f4e58;
-        font-size: 12px;
+        font-size: 13px;
         margin-bottom: 8px;
         padding: 8px 9px;
       }
@@ -436,12 +883,13 @@ After that blockquote, output the final answer.`
       }
 
       .elm-mf-prompt-title {
+        font-size: 15px;
         font-weight: 650;
       }
 
       .elm-mf-prompt-desc {
         color: #52616b;
-        font-size: 12px;
+        font-size: 13px;
       }
 
       .elm-mf-actions {
@@ -456,7 +904,7 @@ After that blockquote, output the final answer.`
         border-radius: 7px;
         color: #2f6f59;
         cursor: pointer;
-        font: 650 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font: 650 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         min-height: 30px;
         padding: 6px 10px;
       }
@@ -494,6 +942,23 @@ After that blockquote, output the final answer.`
         #${PROMPT_BUTTON_ID} .elm-mf-launcher-label {
           display: none;
         }
+
+        #${FIXER_TOGGLE_ID} {
+          height: 42px;
+          margin: 0 8px 0 0;
+          min-height: 42px;
+          padding: 0;
+          width: 42px;
+        }
+
+        #${FIXER_TOGGLE_ID} .elm-mf-toggle-label {
+          display: none;
+        }
+
+        #${FIXER_TOGGLE_ID} .elm-mf-toggle-short {
+          display: inline;
+          font-size: 12px;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -502,6 +967,10 @@ After that blockquote, output the final answer.`
   function isVisible(el) {
     const rect = el.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0;
+  }
+
+  function isExtensionToolbarControl(control) {
+    return control.id === PROMPT_BUTTON_ID || control.id === FIXER_TOGGLE_ID;
   }
 
   function findTopBarPromptAnchor() {
@@ -527,7 +996,7 @@ After that blockquote, output the final answer.`
       document.querySelectorAll('button, [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
     )
       .filter((control) => {
-        if (control.id === PROMPT_BUTTON_ID || !isVisible(control)) return false;
+        if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
         const controlRect = control.getBoundingClientRect();
         return Math.abs(controlRect.top - anchorRect.top) < 48 && Math.abs(controlRect.left - anchorRect.left) < 220;
       })
@@ -548,7 +1017,7 @@ After that blockquote, output the final answer.`
       const hasNearbyControl = Array.from(
         node.querySelectorAll('button, [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
       ).some((control) => {
-        if (control.id === PROMPT_BUTTON_ID || !isVisible(control)) return false;
+        if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
         const controlRect = control.getBoundingClientRect();
         return Math.abs(controlRect.top - anchorRect.top) < 48 && Math.abs(controlRect.left - anchorRect.left) < 220;
       });
@@ -583,7 +1052,7 @@ After that blockquote, output the final answer.`
     return Array.from(
       document.querySelectorAll('button, a, [role="button"], [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
     ).filter((control) => {
-      if (control.id === PROMPT_BUTTON_ID || !isVisible(control)) return false;
+      if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
       const rect = control.getBoundingClientRect();
       return rect.top >= 0 && rect.top < 100 && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38;
     });
@@ -677,17 +1146,21 @@ After that blockquote, output the final answer.`
       button.style.bottom = '';
 
       const promptGroup = findTopBarPromptGroup(tryNewLook) || createTryNewLookGroup(tryNewLook);
-      const parent = promptGroup.parentElement;
+      const interactiveAncestor = promptGroup.closest(
+        'label, button, [role="switch"], mat-slide-toggle, .mat-slide-toggle'
+      );
+      const insertionTarget = interactiveAncestor || promptGroup;
+      const parent = insertionTarget.parentElement;
       if (!parent) return;
 
-      if (button.parentElement !== parent || button.nextSibling !== promptGroup) {
-        parent.insertBefore(button, promptGroup);
+      if (button.parentElement !== parent || button.nextSibling !== insertionTarget) {
+        parent.insertBefore(button, insertionTarget);
       }
 
       const buttonRect = button.getBoundingClientRect();
-      const groupRect = promptGroup.getBoundingClientRect();
+      const groupRect = insertionTarget.getBoundingClientRect();
       if (buttonRect.left > groupRect.left) {
-        parent.insertBefore(button, promptGroup.nextSibling);
+        parent.insertBefore(button, insertionTarget.nextSibling);
       }
       return;
     }
@@ -699,6 +1172,90 @@ After that blockquote, output the final answer.`
     }
 
     positionCompactPromptButton(button);
+  }
+
+  function updateFixerToggle(button) {
+    const enabled = isFixerEnabled();
+    const label = button.querySelector('.elm-mf-toggle-label');
+    const shortLabel = button.querySelector('.elm-mf-toggle-short');
+    const title = enabled
+      ? 'ELM Math Fixer is on. Click to turn it off.'
+      : 'ELM Math Fixer is off. Click to turn it on.';
+
+    const enabledText = String(enabled);
+    const labelText = enabled ? 'Fixer On' : 'Fixer Off';
+    const shortLabelText = enabled ? 'On' : 'Off';
+    if (button.dataset.enabled !== enabledText) button.dataset.enabled = enabledText;
+    if (button.getAttribute('aria-pressed') !== enabledText) {
+      button.setAttribute('aria-pressed', enabledText);
+    }
+    if (button.getAttribute('aria-label') !== title) button.setAttribute('aria-label', title);
+    if (button.title !== title) button.title = title;
+    if (label && label.textContent !== labelText) label.textContent = labelText;
+    if (shortLabel && shortLabel.textContent !== shortLabelText) {
+      shortLabel.textContent = shortLabelText;
+    }
+  }
+
+  function placeFixerToggle(toggle, promptButton) {
+    const isFixedCompact =
+      promptButton.classList.contains('elm-mf-fallback') ||
+      promptButton.classList.contains('elm-mf-compact');
+
+    if (!isFixedCompact && promptButton.parentElement) {
+      toggle.classList.remove('elm-mf-fallback', 'elm-mf-compact');
+      toggle.style.left = '';
+      toggle.style.top = '';
+      toggle.style.right = '';
+      toggle.style.bottom = '';
+      if (toggle.parentElement !== promptButton.parentElement || toggle.nextSibling !== promptButton) {
+        promptButton.parentElement.insertBefore(toggle, promptButton);
+      }
+      return;
+    }
+
+    if (toggle.parentElement !== document.body) document.body.appendChild(toggle);
+    toggle.classList.add('elm-mf-fallback', 'elm-mf-compact');
+
+    const promptRect = promptButton.getBoundingClientRect();
+    const buttonSize = 42;
+    const gap = 8;
+    toggle.style.left = `${Math.max(8, promptRect.left - buttonSize - gap)}px`;
+    toggle.style.top = `${Math.max(8, promptRect.top + (promptRect.height - buttonSize) / 2)}px`;
+    toggle.style.right = '';
+    toggle.style.bottom = '';
+  }
+
+  function ensureFixerToggle(promptButton) {
+    let toggle = document.getElementById(FIXER_TOGGLE_ID);
+    if (!toggle) {
+      toggle = document.createElement('button');
+      toggle.id = FIXER_TOGGLE_ID;
+      toggle.type = 'button';
+
+      const label = document.createElement('span');
+      label.className = 'elm-mf-toggle-label';
+      const shortLabel = document.createElement('span');
+      shortLabel.className = 'elm-mf-toggle-short';
+      toggle.appendChild(label);
+      toggle.appendChild(shortLabel);
+
+      toggle.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const enabled = !isFixerEnabled();
+        setFixerEnabled(enabled);
+        updateFixerToggle(toggle);
+        if (enabled) {
+          scan();
+        } else {
+          restoreAllRescuedMath();
+        }
+      });
+    }
+
+    updateFixerToggle(toggle);
+    placeFixerToggle(toggle, promptButton);
   }
 
   async function copyText(text) {
@@ -759,7 +1316,7 @@ After that blockquote, output the final answer.`
 
     const help = document.createElement('div');
     help.className = 'elm-mf-help';
-    help.textContent = 'Copy a prompt, then open Prompts from the ELM left toolbar (Tools), create a new prompt, paste it, and save. 复制后请到 ELM 左侧工具栏（Tools）里的 Prompts 新建提示词，粘贴并保存；插件只负责复制文本。';
+    help.textContent = 'Copy a prompt, then open Prompts from the ELM left toolbar (Tools), create a new prompt, paste it, and save. For the best possible math rendering, use both this extension and the Math Rendering Fix prompt. They address different parts of the problem, so either one alone can fix only some rendering failures.';
     panel.appendChild(help);
 
     PROMPT_GROUPS.forEach((group) => {
@@ -808,6 +1365,7 @@ After that blockquote, output the final answer.`
     document.body.appendChild(panel);
 
     button.addEventListener('click', (event) => {
+      event.preventDefault();
       event.stopPropagation();
       localStorage.setItem(PROMPT_SEEN_STORAGE_KEY, 'true');
       button.classList.remove('elm-mf-attention');
@@ -836,7 +1394,7 @@ After that blockquote, output the final answer.`
 
       const label = document.createElement('span');
       label.className = 'elm-mf-launcher-label';
-      label.textContent = 'Math Fixer Prompts';
+      label.textContent = 'Math Prompts';
 
       button.appendChild(icon);
       button.appendChild(label);
@@ -851,6 +1409,7 @@ After that blockquote, output the final answer.`
     }
 
     placePromptButton(button);
+    ensureFixerToggle(button);
   }
 
   let debounceTimer = null;
