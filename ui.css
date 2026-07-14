@@ -36,7 +36,7 @@
   position: static;
   flex: 0 0 auto;
   white-space: nowrap;
-  z-index: 2147483646;
+  z-index: 100;
 }
 
 #elm-math-fixer-prompt-button:hover {
@@ -127,7 +127,7 @@
   max-width: min(330px, calc(100vw - 32px));
   padding: 8px 10px;
   position: fixed;
-  z-index: 2147483647;
+  z-index: 9999;
 }
 
 #elm-math-fixer-tools-guide .elm-mf-guide-open {
@@ -178,7 +178,7 @@
   position: static;
   flex: 0 0 auto;
   width: auto;
-  z-index: 2147483646;
+  z-index: 100;
 }
 
 #elm-math-fixer-toggle:focus-visible {
@@ -380,7 +380,7 @@
   padding: 12px;
   position: fixed;
   width: 390px;
-  z-index: 2147483647;
+  z-index: 9999;
 }
 
 #elm-math-fixer-prompt-panel[hidden] {
