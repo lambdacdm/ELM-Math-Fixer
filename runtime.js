@@ -108,8 +108,7 @@
     const element = getRootElement(node);
     return Boolean(
       element?.matches?.(CONTAINER_SELECTOR) ||
-      element?.closest?.(CONTAINER_SELECTOR) ||
-      element?.querySelector?.(CONTAINER_SELECTOR)
+      element?.closest?.(CONTAINER_SELECTOR)
     );
   }
 

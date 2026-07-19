@@ -935,7 +935,7 @@
         setFixerEnabled(enabled);
         updateFixerToggle(toggle);
         if (enabled) {
-          globalThis.ELMMathFixerRuntime?.scan();
+          setTimeout(() => globalThis.ELMMathFixerRuntime?.scan(), 100);
         } else {
           restoreAllRescuedMath();
         }

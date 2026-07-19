@@ -76,6 +76,7 @@
   }
 
   function rescueMixedTextMath(el) {
+    if (!hasMath(el.textContent || '')) return;
     const ignoredSelector = [
       'code',
       'pre',
@@ -723,47 +724,70 @@
     }
   }
 
+  let restoreToken = 0;
+
   function restoreAllRescuedMath() {
-    document.querySelectorAll('.elm-math-local-chain').forEach(restoreLocalMathChain);
-    document.querySelectorAll('.elm-math-native-brace-repair').forEach(restoreNativeBraceRepair);
+    const token = ++restoreToken;
 
-    document.querySelectorAll('.elm-math-hidden-original').forEach((hiddenOriginal) => {
-      const el = hiddenOriginal.parentElement;
-      if (!el) return;
-      const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
-      restoreSingleLineElement(el, hiddenOriginal, wrapper);
-    });
-
-    document.querySelectorAll('.elm-math-rescued-code').forEach((host) => {
-      const original = host.querySelector(':scope > code.elm-math-code-original');
-      if (original) {
-        original.style.display = original.dataset.elmMathOriginalDisplay || '';
-        delete original.dataset.elmMathOriginalDisplay;
-        original.classList.remove('elm-math-code-original');
-        host.replaceWith(original);
-        return;
+    const phases = [
+      // Phase 1: local chain + native brace repair
+      () => {
+        document.querySelectorAll('.elm-math-local-chain, .elm-math-native-brace-repair').forEach((el) => {
+          if (el.classList.contains('elm-math-local-chain')) restoreLocalMathChain(el);
+          else restoreNativeBraceRepair(el);
+        });
+      },
+      // Phase 2: hidden original unwrap
+      () => {
+        document.querySelectorAll('.elm-math-hidden-original').forEach((hiddenOriginal) => {
+          const el = hiddenOriginal.parentElement;
+          if (!el) return;
+          const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
+          restoreSingleLineElement(el, hiddenOriginal, wrapper);
+        });
+      },
+      // Phase 3: rescued code + rescued text + boundary space
+      () => {
+        document.querySelectorAll('.elm-math-rescued-code, .elm-math-rescued-text, .elm-math-boundary-space').forEach((host) => {
+          if (host.classList.contains('elm-math-rescued-code')) {
+            const original = host.querySelector(':scope > code.elm-math-code-original');
+            if (original) {
+              original.style.display = original.dataset.elmMathOriginalDisplay || '';
+              delete original.dataset.elmMathOriginalDisplay;
+              original.classList.remove('elm-math-code-original');
+              host.replaceWith(original);
+              return;
+            }
+            const fallback = document.createElement('code');
+            fallback.textContent = host.dataset.rawText || '';
+            host.replaceWith(fallback);
+          } else if (host.classList.contains('elm-math-rescued-text')) {
+            host.replaceWith(document.createTextNode(host.dataset.rawText || ''));
+          } else {
+            const parent = host.parentNode;
+            host.replaceWith(document.createTextNode(host.dataset.originalWhitespace || ' '));
+            parent?.normalize();
+          }
+        });
+      },
+      // Phase 4: rescued block + split original + container class
+      () => {
+        document.querySelectorAll('.elm-math-rescued-block, .elm-math-split-original, .elm-math-rescued-container').forEach((el) => {
+          if (el.classList.contains('elm-math-rescued-block')) el.remove();
+          else if (el.classList.contains('elm-math-split-original')) restoreSplitOriginal(el);
+          else el.classList.remove('elm-math-rescued-container');
+        });
       }
+    ];
 
-      const fallback = document.createElement('code');
-      fallback.textContent = host.dataset.rawText || '';
-      host.replaceWith(fallback);
-    });
+    function runPhase(i) {
+      if (token !== restoreToken) return;
+      if (i >= phases.length) return;
+      phases[i]();
+      requestAnimationFrame(() => runPhase(i + 1));
+    }
 
-    document.querySelectorAll('.elm-math-rescued-text').forEach((host) => {
-      host.replaceWith(document.createTextNode(host.dataset.rawText || ''));
-    });
-
-    document.querySelectorAll('.elm-math-boundary-space').forEach((spacer) => {
-      const parent = spacer.parentNode;
-      spacer.replaceWith(document.createTextNode(spacer.dataset.originalWhitespace || ' '));
-      parent?.normalize();
-    });
-
-    document.querySelectorAll('.elm-math-rescued-block').forEach((block) => block.remove());
-    document.querySelectorAll('.elm-math-split-original').forEach(restoreSplitOriginal);
-    document.querySelectorAll('.elm-math-rescued-container').forEach((container) => {
-      container.classList.remove('elm-math-rescued-container');
-    });
+    runPhase(0);
   }
 
   function getAffectedMathElements(container, children, affectedRoots) {
@@ -798,13 +822,31 @@
     return affected;
   }
 
+  function getScanChildren(allChildren, affectedElements) {
+    if (!affectedElements) return allChildren;
+    const affectedIndexes = [];
+    allChildren.forEach((child, index) => {
+      if (affectedElements.has(child)) affectedIndexes.push(index);
+    });
+    if (affectedIndexes.length === 0) return allChildren;
+    const included = new Set();
+    affectedIndexes.forEach((index) => {
+      const start = Math.max(0, index - MAX_SPLIT_MATH_NODES);
+      const end = Math.min(allChildren.length - 1, index + MAX_SPLIT_MATH_NODES);
+      for (let i = start; i <= end; i++) included.add(i);
+    });
+    return Array.from(included).sort((a, b) => a - b).map((i) => allChildren[i]);
+  }
+
   function processContainer(container, affectedRoots = null) {
     if (!container?.isConnected) return;
     getMathTextCache = new WeakMap();
 
-    const children = Array.from(container.querySelectorAll(TARGET_ELEMENTS));
-    const affectedElements = getAffectedMathElements(container, children, affectedRoots);
+    const allChildren = Array.from(container.querySelectorAll(TARGET_ELEMENTS));
+    const affectedElements = getAffectedMathElements(container, allChildren, affectedRoots);
     if (affectedElements && affectedElements.size === 0) return;
+
+    const children = getScanChildren(allChildren, affectedElements);
 
     rescueCodeWrappedMath(container);
     log(

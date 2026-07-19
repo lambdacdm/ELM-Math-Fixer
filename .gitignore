@@ -1,3 +1,5 @@
+.claude/
+store-assets/
 *.zip
 *.crx
 *.pem
