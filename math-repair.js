@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const TARGET_ELEMENTS = 'p, li, h1, h2, h3, h4, h5, h6';
+  const TARGET_ELEMENTS = 'p, li, h1, h2, h3, h4, h5, h6, td, th';
   const DEBUG = false;
   const log = (...args) => { if (DEBUG) console.log('[ELM Math Fixer]', ...args); };
   const warn = (...args) => { if (DEBUG) console.warn('[ELM Math Fixer]', ...args); };
@@ -25,6 +25,7 @@
   const MAX_MISPAIRED_NATIVE_MATH = 12;
   const MAX_MISPAIRED_NATIVE_LENGTH = 20000;
   const SETEXT_OPERATOR_BY_TAG = { H1: '=', H2: '-' };
+  let getMathTextCache = new WeakMap();
 
   function getCodeWrappedMathText(code) {
     if (
@@ -453,6 +454,10 @@
 
   // Reverse Markdown emphasis only when it sits inside a math-delimited range.
   // Genuine prose emphasis remains as DOM markup and keeps its visual styling.
+  // When the default marker reconstruction (e.g. `_..._`) does not produce valid
+  // LaTeX, we fall back to alternative emphasis markers and finally to plain
+  // text unwrapping so Markdown-damaged math (notably inside pmatrix cells) can
+  // still render.
   function getMathAwareClone(el, assumeMath = false) {
     const clone = el.cloneNode(true);
     const fullText = clone.textContent || '';
@@ -472,22 +477,55 @@
       return { node, start, end: start + (node.textContent || '').length };
     });
 
-    positionedNodes.forEach(({ node, start, end }) => {
-      const isInsideMath = mathRanges.some(
-        (mathRange) => start >= mathRange.start && end <= mathRange.end
-      );
-      if (!isInsideMath) return;
+    const mathNodes = positionedNodes.filter(({ start, end }) =>
+      mathRanges.some((mathRange) => start >= mathRange.start && end <= mathRange.end)
+    );
+    if (mathNodes.length === 0) return clone;
 
+    const candidateSets = [['_', '__'], ['*', '**'], ['', '']];
+    for (const [emMarker, strongMarker] of candidateSets) {
+      const trial = clone.cloneNode(true);
+      const trialNodes = Array.from(trial.querySelectorAll('em, i, strong, b')).filter(
+        (node) => !node.parentElement?.closest('em, i, strong, b')
+      );
+      trialNodes.forEach((node) => {
+        const isStrong = node.matches('strong, b');
+        const marker = isStrong ? strongMarker : emMarker;
+        const text = node.textContent || '';
+        node.replaceWith(document.createTextNode(`${marker}${text}${marker}`));
+      });
+      trial.normalize();
+      let validationText = trial.textContent || '';
+      if (assumeMath) {
+        const open = validationText.startsWith('$$');
+        const close = validationText.endsWith('$$');
+        if (!open && close) validationText = '$$' + validationText;
+        else if (open && !close) validationText = validationText + '$$';
+        else if (!open && !close) validationText = '$$' + validationText + '$$';
+      }
+      if (isSafeMixedTextMath(validationText)) {
+        return trial;
+      }
+    }
+
+    // All marker candidates failed validation; use the default reconstruction
+    // (underscore) which preserves the historical subscript behavior.
+    mathNodes.forEach(({ node }) => {
       const marker = node.matches('strong, b') ? '__' : '_';
       node.replaceWith(document.createTextNode(`${marker}${node.textContent}${marker}`));
     });
-
     clone.normalize();
     return clone;
   }
 
   function getMathAwareText(el, assumeMath = false) {
-    return getMathAwareClone(el, assumeMath).textContent || '';
+    if (assumeMath) {
+      const cached = getMathTextCache.get(el);
+      if (cached !== undefined) return cached;
+    }
+    const text = getMathAwareClone(el, assumeMath).textContent || '';
+    if (assumeMath) getMathTextCache.set(el, text);
+    return text;
   }
 
   function isLikelyMathFragment(text) {
@@ -677,7 +715,7 @@
     for (let depth = 0; host && depth < 5; depth++) {
       if (
         depth === 0 ||
-        host.matches('.markdown, .markdown-container, .response-ai, .message-content')
+        host.matches('markdown, .markdown, .markdown-container, .response-ai, .message-content')
       ) {
         host.classList.add('elm-math-rescued-container');
       }
@@ -762,6 +800,7 @@
 
   function processContainer(container, affectedRoots = null) {
     if (!container?.isConnected) return;
+    getMathTextCache = new WeakMap();
 
     const children = Array.from(container.querySelectorAll(TARGET_ELEMENTS));
     const affectedElements = getAffectedMathElements(container, children, affectedRoots);
@@ -824,6 +863,7 @@
       if (delimiterCount % 2 === 1) {
         if (hiddenOriginal) {
           restoreSingleLineElement(el, hiddenOriginal, wrapper);
+          getMathTextCache.delete(el);
           text = getMathAwareText(el, true);
         } else {
           text = getMathAwareText(el, true);
@@ -840,30 +880,35 @@
             continue;
           }
 
-          const nextIndex = children.indexOf(nextEl);
+          const isListWrapper = ['UL', 'OL'].includes(nextEl.tagName) &&
+            nextEl.children.length === 1 &&
+            nextEl.firstElementChild?.tagName === 'LI';
+          const effectiveEl = isListWrapper ? nextEl.firstElementChild : nextEl;
+
+          const nextIndex = children.indexOf(effectiveEl);
           if (nextIndex < 0) break;
-          if (nextEl.closest('.elm-math-rescued-block')) {
+          if (effectiveEl.closest('.elm-math-rescued-block')) {
             nextEl = nextEl.nextElementSibling;
             continue;
           }
 
           const previousEl = group[group.length - 1];
           if (
-            !['H1', 'H2', 'P'].includes(nextEl.tagName) ||
+            !['H1', 'H2', 'P', 'LI'].includes(effectiveEl.tagName) ||
             nextEl.parentElement !== el.parentElement ||
             !hasOnlyAllowedSplitSeparators(previousEl, nextEl)
           ) {
             break;
           }
 
-          if (hasNativeRenderedMath(nextEl)) {
+          if (hasNativeRenderedMath(effectiveEl)) {
             break;
           }
 
-          const nextHidden = nextEl.querySelector(':scope > .elm-math-hidden-original');
+          const nextHidden = effectiveEl.querySelector(':scope > .elm-math-hidden-original');
           const nextText = nextHidden
             ? getMathAwareText(nextHidden, true)
-            : getMathAwareText(nextEl, true);
+            : getMathAwareText(effectiveEl, true);
 
           if (combinedText.length + nextText.length + 1 > MAX_SPLIT_MATH_LENGTH) break;
           combinedText += `\n${nextText}`;
@@ -883,7 +928,10 @@
           group.forEach((node) => {
             const hidden = node.querySelector(':scope > .elm-math-hidden-original');
             const oldWrapper = node.querySelector(':scope > .elm-math-rescued-wrapper');
-            if (hidden) restoreSingleLineElement(node, hidden, oldWrapper);
+            if (hidden) {
+              restoreSingleLineElement(node, hidden, oldWrapper);
+              getMathTextCache.delete(node);
+            }
           });
 
           combinedText = group.map((node) => getMathAwareText(node, true)).join('\n');

@@ -7,6 +7,8 @@
     'pmatrix', 'rcases', 'split', 'Vmatrix', 'vmatrix'
   ]);
   const KNOWN_LATEX_COMMAND_CACHE = new Map();
+  const VALIDATION_CACHE_LIMIT = 500;
+  const VALIDATION_CACHE = new Map();
 
   function validateLatex(source, options = {}) {
     const renderer = globalThis.katex;
@@ -187,39 +189,56 @@
 
   function isSafeMixedTextMath(text, options = {}) {
     const { allowUndefinedCommands = false } = options;
-    if (!globalThis.katex?.renderToString) return false;
-    const pattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
-    const ranges = [];
-    let found = false;
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      const segment = match[0];
-      const closing = match.index + segment.length - 1;
-      const singleDollar = segment.startsWith('$') && !segment.startsWith('$$');
-      if (segment.startsWith('$') && (isEscapedAt(text, match.index) || isEscapedAt(text, closing))) return false;
-      const { body, displayMode } = getMathSegmentDetails(segment);
-      if (!body.trim()) return false;
-      const following = text[match.index + segment.length] || '';
-      if (singleDollar && /^\d/.test(body.trim()) && /^\d/.test(following)) return false;
-      const normalized = getMathSegmentDetails(normalizeMathBackslashes(segment)).body;
-      if (hasUnresolvedDoubledBackslash(normalized)) return false;
-      const validation = allowUndefinedCommands
-        ? validateWithLiteralUnknownCommands(normalized, { displayMode })
-        : validateLatex(normalized, { displayMode });
-      if (!validation.ok) return false;
-      ranges.push({ start: match.index, end: match.index + segment.length });
-      found = true;
+    const cacheKey = text + '\u0000' + (allowUndefinedCommands ? '1' : '0');
+    if (VALIDATION_CACHE.has(cacheKey)) {
+      const cached = VALIDATION_CACHE.get(cacheKey);
+      VALIDATION_CACHE.delete(cacheKey);
+      VALIDATION_CACHE.set(cacheKey, cached);
+      return cached;
     }
-    if (!found) return false;
-    let rangeIndex = 0;
-    for (let i = 0; i < text.length; i++) {
-      while (ranges[rangeIndex]?.end <= i) rangeIndex++;
-      const range = ranges[rangeIndex];
-      if (range && i >= range.start && i < range.end) { i = range.end - 1; continue; }
-      if (text[i] === '$' && !isEscapedAt(text, i)) return false;
-      if (text[i] === '\\' && ['(', '['].includes(text[i + 1]) && !isEscapedAt(text, i)) return false;
+
+    const result = (() => {
+      if (!globalThis.katex?.renderToString) return false;
+      const pattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
+      const ranges = [];
+      let found = false;
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const segment = match[0];
+        const closing = match.index + segment.length - 1;
+        const singleDollar = segment.startsWith('$') && !segment.startsWith('$$');
+        if (segment.startsWith('$') && (isEscapedAt(text, match.index) || isEscapedAt(text, closing))) return false;
+        const { body, displayMode } = getMathSegmentDetails(segment);
+        if (!body.trim()) return false;
+        const following = text[match.index + segment.length] || '';
+        if (singleDollar && /^\d/.test(body.trim()) && /^\d/.test(following)) return false;
+        const normalized = getMathSegmentDetails(normalizeMathBackslashes(segment)).body;
+        if (hasUnresolvedDoubledBackslash(normalized)) return false;
+        const validation = allowUndefinedCommands
+          ? validateWithLiteralUnknownCommands(normalized, { displayMode })
+          : validateLatex(normalized, { displayMode });
+        if (!validation.ok) return false;
+        ranges.push({ start: match.index, end: match.index + segment.length });
+        found = true;
+      }
+      if (!found) return false;
+      let rangeIndex = 0;
+      for (let i = 0; i < text.length; i++) {
+        while (ranges[rangeIndex]?.end <= i) rangeIndex++;
+        const range = ranges[rangeIndex];
+        if (range && i >= range.start && i < range.end) { i = range.end - 1; continue; }
+        if (text[i] === '$' && !isEscapedAt(text, i)) return false;
+        if (text[i] === '\\' && ['(', '['].includes(text[i + 1]) && !isEscapedAt(text, i)) return false;
+      }
+      return true;
+    })();
+
+    VALIDATION_CACHE.set(cacheKey, result);
+    if (VALIDATION_CACHE.size > VALIDATION_CACHE_LIMIT) {
+      const firstKey = VALIDATION_CACHE.keys().next().value;
+      VALIDATION_CACHE.delete(firstKey);
     }
-    return true;
+    return result;
   }
 
   globalThis.ELMMathFixerCore = {

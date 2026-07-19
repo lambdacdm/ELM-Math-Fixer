@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const CONTAINER_SELECTOR = '.markdown, .markdown-container, .response-ai, .message-content';
+  const CONTAINER_SELECTOR = 'markdown, .markdown, .markdown-container, .response-ai, .message-content';
   const DEBUG = false;
   const SCAN_DELAY_MS = 180;
   const SETTLE_SCAN_DELAY_MS = 700;

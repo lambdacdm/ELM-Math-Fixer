@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const CONTAINER_SELECTOR = '.markdown, .markdown-container, .response-ai, .message-content';
+  const CONTAINER_SELECTOR = 'markdown, .markdown, .markdown-container, .response-ai, .message-content';
   const DEBUG = false;
   const PROMPT_BUTTON_ID = 'elm-math-fixer-prompt-button';
   const FIXER_TOGGLE_ID = 'elm-math-fixer-toggle';

@@ -85,6 +85,10 @@ async function runMathRepairTests(browser) {
         <h2>B</h2>
         <p>C$$</p>
       </section>
+      <section class="markdown" id="setext-matrix-amp-case">
+        <p>$$ \\rho_{E,\\ell}(G_{\\mathbb Q}) \\subseteq \\left\\{ \\begin{pmatrix}</p>
+        <li>&amp; *\\\\ 0 &amp; * \\end{pmatrix} \\right\\}. $$</li>
+      </section>
       <section class="markdown" id="single-line-cases">
         <p id="valid-inline">For $x_1$.</p>
         <p id="inline-spacing">is the $x_1=e_1$ coordinate and</p>
@@ -108,9 +112,27 @@ async function runMathRepairTests(browser) {
         <p id="known-double">$\\\\alpha + 1$</p>
         <p id="unknown-double">$\\\\notARealCommand + 1$</p>
       </section>
+      <section class="markdown" id="table-cases">
+        <table><tbody>
+          <tr><td id="td-em-backslash"></td></tr>
+          <tr><td id="td-em-amp"></td></tr>
+        </tbody></table>
+      </section>
       <section class="markdown" id="incremental-window"></section>
     </main>
   `);
+  await page.evaluate(() => {
+    const fillCell = (id, beforeEm, emText, afterEm) => {
+      const cell = document.getElementById(id);
+      cell.textContent = '$ ' + beforeEm;
+      const em = document.createElement('em');
+      em.textContent = emText;
+      cell.appendChild(em);
+      cell.appendChild(document.createTextNode(afterEm));
+    };
+    fillCell('td-em-backslash', '\\begin{pmatrix}1&', '\\\\0&', '\\end{pmatrix} $');
+    fillCell('td-em-amp', '\\begin{pmatrix}', '&', '\\\\0&*\\end{pmatrix} $');
+  });
   await loadContentScripts(page);
   await page.waitForTimeout(800);
 
@@ -189,11 +211,17 @@ async function runMathRepairTests(browser) {
       currencyText: document.querySelector('#currency')?.textContent,
       unmatchedWrapper: document.querySelectorAll('#unmatched > .elm-math-rescued-wrapper').length,
       subscriptTex: annotation('#subscript annotation[encoding="application/x-tex"]'),
+      setextMatrixAmpRendered: document.querySelectorAll('#setext-matrix-amp-case > .elm-math-rescued-block .katex').length,
+      setextMatrixAmpTex: annotation('#setext-matrix-amp-case annotation[encoding="application/x-tex"]'),
       strongPreserved: Boolean(document.querySelector('#prose-strong > strong')),
       strongWrapper: document.querySelectorAll('#prose-strong > .elm-math-rescued-wrapper').length,
       codeRendered: document.querySelectorAll('#code-math .elm-math-rescued-code .katex').length,
       knownDoubleTex: annotation('#known-double annotation[encoding="application/x-tex"]'),
-      unknownDoubleWrapper: document.querySelectorAll('#unknown-double > .elm-math-rescued-wrapper').length
+      unknownDoubleWrapper: document.querySelectorAll('#unknown-double > .elm-math-rescued-wrapper').length,
+      tdEmBackslashRendered: document.querySelectorAll('#td-em-backslash .katex:not(.katex-error)').length,
+      tdEmBackslashTex: annotation('#td-em-backslash annotation[encoding="application/x-tex"]'),
+      tdEmAmpRendered: document.querySelectorAll('#td-em-amp .katex:not(.katex-error)').length,
+      tdEmAmpTex: annotation('#td-em-amp annotation[encoding="application/x-tex"]')
     };
   });
   assert(initial.setextRaw?.includes('\n=\n'), 'Setext-swallowed equals was not restored');
@@ -272,6 +300,12 @@ async function runMathRepairTests(browser) {
   assert(initial.knownDoubleTex.includes('\\alpha'), 'known doubled LaTeX command was not normalized');
   assert(!initial.knownDoubleTex.includes('\\\\alpha'), 'known command still has doubled backslashes');
   assert(initial.unknownDoubleWrapper === 0, 'unknown doubled command was modified');
+  assert(initial.tdEmBackslashRendered === 1 && initial.tdEmBackslashTex.includes('\\begin{pmatrix}'),
+    'Markdown-damaged pmatrix inside a td cell with backslash was not restored');
+  assert(initial.tdEmAmpRendered === 1 && initial.tdEmAmpTex.includes('\\begin{pmatrix}'),
+    'Markdown-damaged pmatrix inside a td cell with ampersand was not restored');
+  assert(initial.setextMatrixAmpRendered === 1 && initial.setextMatrixAmpTex.includes('begin{pmatrix'),
+    'Markdown-split display math starting with pmatrix spanning <li> was not restored');
 
   const incrementalWindow = await page.evaluate(() => {
     const container = document.querySelector('#incremental-window');
