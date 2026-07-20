@@ -21,6 +21,12 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Building ELM-Math-Fixer v$VERSION"
 
+      - name: Read release notes
+        id: notes
+        run: |
+          NOTES=$(jq -Rs . < RELEASE_NOTES.md)
+          echo "body=$NOTES" >> $GITHUB_OUTPUT
+
       - name: Create package zip
         run: |
           ZIP_NAME="ELM-Math-Fixer-v${{ steps.version.outputs.version }}.zip"
@@ -38,9 +44,6 @@ jobs:
         with:
           name: v${{ steps.version.outputs.version }}
           tag_name: ${{ github.ref_name }}
-          body: |
-            ELM Math Fixer v${{ steps.version.outputs.version }}
-
-            See [README](https://github.com/${{ github.repository }}) for installation instructions.
+          body: ${{ fromJSON(steps.notes.outputs.body) }}
           files: ${{ steps.package.outputs.zip_name }}
-          generate_release_notes: true
+          generate_release_notes: false
