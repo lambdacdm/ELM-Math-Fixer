@@ -1,6 +1,14 @@
 .elm-math-rescued-container {
   align-self: stretch;
+  box-sizing: border-box;
+  display: block;
+  max-width: 100%;
   min-width: 0;
+}
+
+markdown.elm-math-rescued-container,
+.markdown-container.elm-math-rescued-container {
+  width: 100%;
 }
 
 .elm-math-rescued-block {
