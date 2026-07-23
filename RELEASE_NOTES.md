@@ -1,4 +1,4 @@
-# ELM Math Fixer v1.2
+# ELM Math Fixer v1.2.1
 
 This release rolls up all of the v1.1.x maintenance and quality improvements into a single minor-version bump, and supersedes the previous v1.1.x line.
 
@@ -28,4 +28,4 @@ This release rolls up all of the v1.1.x maintenance and quality improvements int
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.1.zip`.

@@ -2,6 +2,8 @@
 
 # ELM Math Fixer
 
+> **Disclaimer:** This is an independent, unofficial project created by a third-party developer. It is not developed, operated, maintained, reviewed, endorsed, or affiliated in any way with the University of Edinburgh, EDINA, or the ELM platform. "ELM" is used here solely to describe compatibility with that platform. This extension does not collect, store, transmit, sell, or share any user data — all processing happens locally in your browser.
+
 <details open>
 <summary id="english"><strong>English</strong></summary>
 
@@ -11,7 +13,7 @@ ELM Math Fixer is a small Chrome extension that improves KaTeX math rendering on
 
 For best results, use the included Math Rendering Fix prompt alongside the extension, although it is not required.
 
-Extension version: 1.2.
+Extension version: 1.2.1.
 
 Bundled KaTeX version: [0.17.0](https://github.com/KaTeX/KaTeX). This matches the version currently declared by the upstream `main` source.
 
@@ -52,13 +54,15 @@ This extension runs only on `https://elm.edina.ac.uk/`. It does not collect, sto
 <details open>
 <summary id="中文"><strong>中文</strong></summary>
 
+> **免责声明：** 本项目为独立第三方开发者制作的非官方工具，与爱丁堡大学（University of Edinburgh）、EDINA 或 ELM 平台**没有任何开发、运营、维护、审核、授权或背书关系**。文中出现的"ELM"仅用于说明本插件与该平台的兼容性。本插件**不会收集、存储、传输、出售或分享任何用户数据**，所有处理均在你本地浏览器中完成。
+
 ## 简介
 
 ELM Math Fixer 是一个小型 Chrome 扩展，用于改善爱丁堡大学 [ELM 平台](https://elm.edina.ac.uk/)上的 KaTeX 数学公式渲染。本扩展可在 [Chrome 应用商店](https://chromewebstore.google.com/detail/elm-math-fixer/llkakngbkhmnfopiidofpnfacmiboddd) 安装。
 
 为获得最佳效果，建议将插件与内置的 Math Rendering Fix 提示词配合使用，但这不是必需的。
 
-插件版本：1.2。
+插件版本：1.2.1。
 
 内置 KaTeX 版本：[0.17.0](https://github.com/KaTeX/KaTeX)。该版本与 KaTeX 上游仓库当前 `main` 源码声明的版本一致。
 
