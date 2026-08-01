@@ -8,6 +8,7 @@ const packageJson = JSON.parse(read('package.json'));
 const readme = read('README.md');
 const content = read('content.js');
 const storeNotes = read('STORE_SUBMISSION.md');
+const releaseNotes = read('RELEASE_NOTES.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -16,6 +17,8 @@ function assert(condition, message) {
 assert(packageJson.version === manifest.version, 'package.json version does not match manifest.json');
 assert(readme.includes(`Extension version: ${manifest.version}.`), 'English README version is stale');
 assert(readme.includes(`插件版本：${manifest.version}。`), 'Chinese README version is stale');
+assert(releaseNotes.includes(`# ELM Math Fixer v${manifest.version}`), 'RELEASE_NOTES title version is stale');
+assert(releaseNotes.includes(`ELM-Math-Fixer-v${manifest.version}.zip`), 'RELEASE_NOTES zip reference is stale');
 
 for (const relativePath of manifest.content_scripts.flatMap((entry) => [...entry.js, ...entry.css])) {
   assert(fs.existsSync(path.join(root, relativePath)), `manifest references missing file: ${relativePath}`);

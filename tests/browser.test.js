@@ -1,9 +1,43 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright-core');
 
 const repoRoot = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'manifest.json'), 'utf8'));
+
+function findPlaywrightChrome() {
+  const bases = [
+    path.join(os.homedir(), '.cache', 'ms-playwright'),
+    path.join(os.homedir(), 'AppData', 'Local', 'ms-playwright')
+  ];
+  if (fs.existsSync('/mnt/c/Users')) {
+    for (const name of fs.readdirSync('/mnt/c/Users')) {
+      if (name === 'Public' || name === 'Default') continue;
+      bases.push(path.join('/mnt/c/Users', name, 'AppData', 'Local', 'ms-playwright'));
+    }
+  }
+  for (const base of bases) {
+    let entries;
+    try {
+      entries = fs.readdirSync(base);
+    } catch (error) {
+      continue;
+    }
+    for (const name of entries.sort().reverse()) {
+      if (!name.startsWith('chromium') || name.includes('headless')) continue;
+      const dir = path.join(base, name);
+      for (const candidate of [
+        path.join(dir, 'chrome-win64', 'chrome.exe'),
+        path.join(dir, 'chrome-win', 'chrome.exe'),
+        path.join(dir, 'chrome-linux', 'chrome')
+      ]) {
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+  }
+  return undefined;
+}
 
 function findChrome() {
   const candidates = [
@@ -12,7 +46,8 @@ function findChrome() {
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     '/usr/bin/google-chrome',
     '/usr/bin/chromium',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    findPlaywrightChrome()
   ].filter(Boolean);
 
   return candidates.find((candidate) => fs.existsSync(candidate));
@@ -319,14 +354,23 @@ async function runMathRepairTests(browser) {
       container.appendChild(paragraph);
       return paragraph;
     });
+    const farCode = document.createElement('p');
+    farCode.id = 'incremental-code-math';
+    const codeEl = document.createElement('code');
+    codeEl.textContent = '$z_3$';
+    farCode.appendChild(codeEl);
+    container.appendChild(farCode);
     globalThis.ELMMathFixerRuntime.scan([container, paragraphs[0]], false);
     return {
       nearRendered: paragraphs[0].querySelectorAll('.katex').length,
-      farRendered: paragraphs[29].querySelectorAll('.katex').length
+      farRendered: paragraphs[29].querySelectorAll('.katex').length,
+      codeMathRescued: farCode.querySelectorAll('.elm-math-rescued-code').length
     };
   });
   assert(incrementalWindow.nearRendered > 0 && incrementalWindow.farRendered === 0,
     'an incremental scan processed the entire container instead of the affected window');
+  assert(incrementalWindow.codeMathRescued === 0,
+    'an incremental scan processed code-wrapped math outside the affected window');
 
   await page.evaluate(() => {
     document.querySelector('#setext-case').appendChild(document.createElement('span'));
@@ -356,6 +400,26 @@ async function runMathRepairTests(browser) {
     'a rapidly replaced streaming node was missed by incremental scanning');
   assert(afterMutation.mixedLocalChains === 1 && afterMutation.mixedValidMath === 2,
     'repeated scanning duplicated or skipped mixed local math repairs');
+
+  const segmentCacheCalls = await page.evaluate(() => {
+    let calls = 0;
+    const original = globalThis.katex.renderToString.bind(globalThis.katex);
+    globalThis.katex.renderToString = (...args) => {
+      calls++;
+      return original(...args);
+    };
+    const texts = Array.from({ length: 12 }, (_, index) => `Text ${index}: $x_1 + y_2$.`);
+    try {
+      for (const text of texts) {
+        if (!globalThis.ELMMathFixerCore.isSafeMixedTextMath(text)) return -1;
+      }
+      return calls;
+    } finally {
+      globalThis.katex.renderToString = original;
+    }
+  });
+  assert(segmentCacheCalls > 0 && segmentCacheCalls < 12,
+    'segment validation cache did not reuse repeated formula validation');
 
   await page.evaluate(() => {
     globalThis.__elmOriginalIsFixerEnabled = globalThis.ELMMathFixerUI.isFixerEnabled;

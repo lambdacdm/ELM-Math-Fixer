@@ -1,31 +1,18 @@
-# ELM Math Fixer v1.2.1
+# ELM Math Fixer v1.2.2
 
-This release rolls up all of the v1.1.x maintenance and quality improvements into a single minor-version bump, and supersedes the previous v1.1.x line.
+This release focuses on performance for long chat histories and automated quality gates.
 
-## What's New since v1.1
-
-### Fixes
-- **Container selector & emphasis markers**: Fixed the container selector that missed some ELM output structures, and corrected emphasis-marker (`*`/`**`/plain) candidate handling in `getMathAwareClone` so Markdown emphasis adjacent to math no longer breaks rescue. Also added fallback through all candidate markers before falling back to underscore, and support for unbalanced `$` in `getMathAwareClone` when `assumeMath=true`.
-- **Z-index button overlap**: Fixed the prompt-picker button overlapping other ELM UI elements (z-index handling) introduced in v1.1.1.
-- **Scan timing**: Wrapped the post-mutation rescan in a short debounce (`setTimeout 100ms`) to avoid running scans on mid-flux DOM, reducing flicker and redundant work.
-- **Restore pipeline**: Reworked `restoreAllRescuedMath` into a token-based, three-phase pipeline (local chain/native brace repair → hidden-original unwrap → rescued code/text/boundary-space) so restores are resilient to re-entrance and partial DOM changes.
+## What's New since v1.2.1
 
 ### Performance
-- **Validation cache**: Added a WeakMap cache for `getMathAwareText(assumeMath=true)` and a cache for repeated KaTeX validation results, avoiding redundant `cloneNode(true)` and render calls within a single scan pass.
-- **Text cache invalidation**: Invalidate the text cache after `restoreSingleLineElement` DOM changes so subsequent scans see fresh content.
+- **Segment-level KaTeX validation cache**: KaTeX validation results are now cached per formula fragment (not per full text block), so the same formula appearing dozens of times in a long chat history is only rendered/validated once. Long pages with repeated formulas see noticeably less main-thread work during scans.
+- **Incremental scan scoping**: Code-wrapped math rescue (`rescueCodeWrappedMath`) now runs per scanned element instead of scanning the entire container, so incremental scans no longer re-inspect code elements outside the affected window.
 
-### Coverage
-- Added `td`, `th` to `TARGET_ELEMENTS` so table-cell formulas are scanned and repaired.
-- Unwrap single-child `UL`/`OL` wrappers in split-math merge so list-wrapped math restores cleanly.
-- Added `hasMath` guard in math-repair entry so non-math text nodes short-circuit early.
-
-### Documentation & Packaging
-- Renamed "Install Locally in Chrome" to "How to Use", with both **Chrome Web Store** (stable) and **local install** (latest) options, mirrored in the Chinese section.
-- Replaced the specific LLM attribution with a generic "developed with the assistance of multiple large language models" note.
-- Fixed stale Chinese version string in README (1.1.4 → 1.1.5).
-- Added a GitHub Actions release workflow (`release.yml`) that builds the zip from source and publishes the GitHub Release on tag push.
-- Bumped `softprops/action-gh-release` to `v2.2.1` for Node 24 compatibility.
+### Quality & CI
+- **Automated test workflow**: Added a GitHub Actions workflow (`test.yml`) that runs syntax checks, metadata checks, and the full browser test suite on every push and pull request, with Chromium installed automatically on CI.
+- **Version consistency checks**: Metadata tests now also verify the RELEASE_NOTES title and packaged zip reference match the current version.
+- **Test browser discovery**: Browser tests now auto-detect Playwright-downloaded Chromium on Linux, Windows, and WSL, so the suite runs locally without a system Chrome install.
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.1.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.2.zip`.

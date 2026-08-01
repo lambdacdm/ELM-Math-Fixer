@@ -9,6 +9,23 @@
   const KNOWN_LATEX_COMMAND_CACHE = new Map();
   const VALIDATION_CACHE_LIMIT = 500;
   const VALIDATION_CACHE = new Map();
+  const SEGMENT_VALIDATION_CACHE = new Map();
+
+  function getCachedSegmentValidation(key) {
+    if (!SEGMENT_VALIDATION_CACHE.has(key)) return undefined;
+    const cached = SEGMENT_VALIDATION_CACHE.get(key);
+    SEGMENT_VALIDATION_CACHE.delete(key);
+    SEGMENT_VALIDATION_CACHE.set(key, cached);
+    return cached;
+  }
+
+  function setCachedSegmentValidation(key, result) {
+    SEGMENT_VALIDATION_CACHE.set(key, result);
+    if (SEGMENT_VALIDATION_CACHE.size > VALIDATION_CACHE_LIMIT) {
+      const firstKey = SEGMENT_VALIDATION_CACHE.keys().next().value;
+      SEGMENT_VALIDATION_CACHE.delete(firstKey);
+    }
+  }
 
   function validateLatex(source, options = {}) {
     const renderer = globalThis.katex;
@@ -212,12 +229,18 @@
         if (!body.trim()) return false;
         const following = text[match.index + segment.length] || '';
         if (singleDollar && /^\d/.test(body.trim()) && /^\d/.test(following)) return false;
-        const normalized = getMathSegmentDetails(normalizeMathBackslashes(segment)).body;
-        if (hasUnresolvedDoubledBackslash(normalized)) return false;
-        const validation = allowUndefinedCommands
+      const normalized = getMathSegmentDetails(normalizeMathBackslashes(segment)).body;
+      if (hasUnresolvedDoubledBackslash(normalized)) return false;
+      const segmentCacheKey =
+        `${displayMode ? 'd' : 'i'}\u0000${allowUndefinedCommands ? 'u' : 's'}\u0000${normalized}`;
+      const cachedValidation = getCachedSegmentValidation(segmentCacheKey);
+      const validation = cachedValidation !== undefined
+        ? { ok: cachedValidation }
+        : allowUndefinedCommands
           ? validateWithLiteralUnknownCommands(normalized, { displayMode })
           : validateLatex(normalized, { displayMode });
-        if (!validation.ok) return false;
+      if (cachedValidation === undefined) setCachedSegmentValidation(segmentCacheKey, validation.ok);
+      if (!validation.ok) return false;
         ranges.push({ start: match.index, end: match.index + segment.length });
         found = true;
       }

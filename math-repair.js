@@ -848,7 +848,6 @@
 
     const children = getScanChildren(allChildren, affectedElements);
 
-    rescueCodeWrappedMath(container);
     log(
       'matched text elements:',
       affectedElements ? affectedElements.size : children.length,
@@ -874,6 +873,7 @@
         continue;
       }
 
+      rescueCodeWrappedMath(el);
       rescueNativePairedSetBraces(el);
 
       if (el.querySelector('.elm-math-local-chain')) {
