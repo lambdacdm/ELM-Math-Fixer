@@ -161,6 +161,36 @@ K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
           <tr><td id="td-em-amp"></td></tr>
         </tbody></table>
       </section>
+      <section class="markdown" id="code-block-escape-case">
+        <pre><code class="language-latex">\\\\[ \\\\frac{\\\\zeta_8^i-1}{\\\\zeta_8^j-1},\\\\qquad 1\\\\leq i\\\\ne j<8, \\\\]</code></pre>
+      </section>
+      <section class="markdown" id="code-block-plain-case">
+        <pre><code>const s = "\\\\[not math\\\\]";</code></pre>
+      </section>
+      <section class="markdown" id="code-block-mixed-case">
+        <pre><code class="language-latex">The $S_3$-action adds $12$ points, since
+\\\\[
+    \\\\frac{\\\\zeta_8^i-1}{\\\\zeta_8^j-1},\\\\qquad 1\\\\leq i\\\\ne j&lt;8,
+\\\\]
+are distinct, and give
+\\\\[ 24+42+3=69 \\\\]
+points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
+      </section>
+      <section class="markdown" id="code-block-latex-inline">
+        <pre><code class="language-latex">The ratio is $\\\\frac{1}{2}$.</code></pre>
+      </section>
+      <section class="markdown" id="code-block-latex-env">
+        <pre><code class="language-latex">\\\\begin{aligned} a &amp;= \\\\frac{1}{2} \\\\\\\\ b &amp;= \\\\frac{3}{4} \\\\end{aligned}</code></pre>
+      </section>
+      <section class="markdown" id="code-block-text-case">
+        <pre><code class="language-text">\\\\frac{1}{2} and \\\\[x\\\\]</code></pre>
+      </section>
+      <section class="markdown" id="code-block-tex-case">
+        <pre><code class="language-tex">\\\\frac{1}{2} \\\\text{ and } \\\\zeta_8</code></pre>
+      </section>
+      <section class="markdown" id="code-block-latex-clean">
+        <pre><code class="language-latex">\\begin{aligned} a &amp;= b \\\\ c &amp;= d \\end{aligned}</code></pre>
+      </section>
       <section class="markdown" id="incremental-window"></section>
     </main>
   `);
@@ -262,6 +292,24 @@ K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
       strongPreserved: Boolean(document.querySelector('#prose-strong > strong')),
       strongWrapper: document.querySelectorAll('#prose-strong > .elm-math-rescued-wrapper').length,
       codeRendered: document.querySelectorAll('#code-math .elm-math-rescued-code .katex').length,
+      codeBlockEscapeText: document.querySelector('#code-block-escape-case code')?.textContent,
+      codeBlockEscapeUnescaped: document.querySelectorAll('#code-block-escape-case code.elm-math-code-unescaped').length,
+      codeBlockEscapeKatex: document.querySelectorAll('#code-block-escape-case .katex').length,
+      codeBlockPlainText: document.querySelector('#code-block-plain-case code')?.textContent,
+      codeBlockPlainUnescaped: document.querySelectorAll('#code-block-plain-case code.elm-math-code-unescaped').length,
+      codeBlockMixedText: document.querySelector('#code-block-mixed-case code')?.textContent,
+      codeBlockMixedUnescaped: document.querySelectorAll('#code-block-mixed-case code.elm-math-code-unescaped').length,
+      codeBlockMixedKatex: document.querySelectorAll('#code-block-mixed-case .katex').length,
+      codeBlockLatexInlineText: document.querySelector('#code-block-latex-inline code')?.textContent,
+      codeBlockLatexInlineUnescaped: document.querySelectorAll('#code-block-latex-inline code.elm-math-code-unescaped').length,
+      codeBlockLatexEnvText: document.querySelector('#code-block-latex-env code')?.textContent,
+      codeBlockLatexEnvUnescaped: document.querySelectorAll('#code-block-latex-env code.elm-math-code-unescaped').length,
+      codeBlockTextText: document.querySelector('#code-block-text-case code')?.textContent,
+      codeBlockTextUnescaped: document.querySelectorAll('#code-block-text-case code.elm-math-code-unescaped').length,
+      codeBlockTexText: document.querySelector('#code-block-tex-case code')?.textContent,
+      codeBlockTexUnescaped: document.querySelectorAll('#code-block-tex-case code.elm-math-code-unescaped').length,
+      codeBlockCleanText: document.querySelector('#code-block-latex-clean code')?.textContent,
+      codeBlockCleanUnescaped: document.querySelectorAll('#code-block-latex-clean code.elm-math-code-unescaped').length,
       knownDoubleTex: annotation('#known-double annotation[encoding="application/x-tex"]'),
       unknownDoubleWrapper: document.querySelectorAll('#unknown-double > .elm-math-rescued-wrapper').length,
       tdEmBackslashRendered: document.querySelectorAll('#td-em-backslash .katex:not(.katex-error)').length,
@@ -347,6 +395,32 @@ K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
   assert(initial.subscriptTex.includes('L_n(z_1)'), 'Markdown-damaged subscript was not restored');
   assert(initial.strongPreserved && initial.strongWrapper === 0, 'ordinary strong text was modified');
   assert(initial.codeRendered > 0, 'code-wrapped math was not rendered');
+  assert(initial.codeBlockEscapeText?.includes('\\frac') && !initial.codeBlockEscapeText?.includes('\\\\frac'),
+    'escaped code block commands were not unwrapped to single backslashes');
+  assert(initial.codeBlockEscapeText?.includes('\\[') && !initial.codeBlockEscapeText?.includes('\\\\['),
+    'escaped code block delimiters were not unwrapped');
+  assert(initial.codeBlockEscapeUnescaped === 1 && initial.codeBlockEscapeKatex === 0,
+    'an unwrapped code block was not left as plain code');
+  assert(initial.codeBlockPlainText === 'const s = "\\\\[not math\\\\]";' && initial.codeBlockPlainUnescaped === 0,
+    'a genuine code block was incorrectly modified');
+  assert(initial.codeBlockMixedText?.includes('\\frac') && !initial.codeBlockMixedText?.includes('\\\\frac'),
+    'mixed code block commands were not unwrapped');
+  assert(initial.codeBlockMixedText?.includes('\\[ 24+42+3=69 \\]'),
+    'a delimiter-only doubled formula in a code block was not unwrapped');
+  assert(initial.codeBlockMixedText?.includes('matching \\[ -2+2\\zeta_8 \\]'),
+    'a single-backslash formula in a mixed code block was incorrectly modified');
+  assert(initial.codeBlockMixedUnescaped === 1 && initial.codeBlockMixedKatex === 0,
+    'a mixed code block was not left as plain code');
+  assert(initial.codeBlockLatexInlineText === 'The ratio is $\\frac{1}{2}$.' && initial.codeBlockLatexInlineUnescaped === 1,
+    'inline doubled LaTeX inside a latex code block was not normalized');
+  assert(initial.codeBlockLatexEnvText === '\\begin{aligned} a &= \\frac{1}{2} \\\\ b &= \\frac{3}{4} \\end{aligned}' && initial.codeBlockLatexEnvUnescaped === 1,
+    'a doubled LaTeX environment block was not unwrapped');
+  assert(initial.codeBlockTextText === '\\\\frac{1}{2} and \\\\[x\\\\]' && initial.codeBlockTextUnescaped === 0,
+    'a language-text block was incorrectly modified');
+  assert(initial.codeBlockTexText === '\\frac{1}{2} \\text{ and } \\zeta_8' && initial.codeBlockTexUnescaped === 1,
+    'language-tex block commands were not unwrapped');
+  assert(initial.codeBlockCleanText === '\\begin{aligned} a &= b \\\\ c &= d \\end{aligned}' && initial.codeBlockCleanUnescaped === 0,
+    'a genuine single-layer latex block was incorrectly modified');
   assert(initial.knownDoubleTex.includes('\\alpha'), 'known doubled LaTeX command was not normalized');
   assert(!initial.knownDoubleTex.includes('\\\\alpha'), 'known command still has doubled backslashes');
   assert(initial.unknownDoubleWrapper === 0, 'unknown doubled command was modified');
@@ -467,6 +541,14 @@ K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
     blocks: document.querySelectorAll('.elm-math-rescued-block').length,
     wrappers: document.querySelectorAll('.elm-math-rescued-wrapper').length,
     codeHosts: document.querySelectorAll('.elm-math-rescued-code').length,
+    codeBlockEscapeRestored: document.querySelector('#code-block-escape-case code')?.textContent,
+    codeBlockEscapeUnescapedLeft: document.querySelectorAll('#code-block-escape-case code.elm-math-code-unescaped').length,
+    codeBlockMixedRestored: document.querySelector('#code-block-mixed-case code')?.textContent,
+    codeBlockMixedUnescapedLeft: document.querySelectorAll('#code-block-mixed-case code.elm-math-code-unescaped').length,
+    codeBlockLatexInlineRestored: document.querySelector('#code-block-latex-inline code')?.textContent,
+    codeBlockLatexInlineUnescapedLeft: document.querySelectorAll('#code-block-latex-inline code.elm-math-code-unescaped').length,
+    codeBlockLatexEnvRestored: document.querySelector('#code-block-latex-env code')?.textContent,
+    codeBlockLatexEnvUnescapedLeft: document.querySelectorAll('#code-block-latex-env code.elm-math-code-unescaped').length,
     boundarySpacers: document.querySelectorAll('.elm-math-boundary-space').length,
     nativeBraceRepairs: document.querySelectorAll('.elm-math-native-brace-repair').length,
     nativeBraceOriginal: document.querySelector('#native-paired-braces annotation[encoding="application/x-tex"]')?.textContent,
@@ -484,6 +566,14 @@ K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
   }));
   assert(restored.blocks === 0 && restored.wrappers === 0 && restored.codeHosts === 0 && restored.boundarySpacers === 0 && restored.localChains === 0 && restored.nativeBraceRepairs === 0,
     'turning Fixer off did not restore the original DOM');
+  assert(restored.codeBlockEscapeRestored?.includes('\\\\frac') && restored.codeBlockEscapeUnescapedLeft === 0,
+    'turning Fixer off did not restore the escaped code block content');
+  assert(restored.codeBlockMixedRestored?.includes('\\\\frac') && restored.codeBlockMixedUnescapedLeft === 0,
+    'turning Fixer off did not restore the mixed code block content');
+  assert(restored.codeBlockLatexInlineRestored === 'The ratio is $\\\\frac{1}{2}$.' && restored.codeBlockLatexInlineUnescapedLeft === 0,
+    'turning Fixer off did not restore the inline latex code block content');
+  assert(restored.codeBlockLatexEnvRestored?.includes('\\\\begin{aligned}') && restored.codeBlockLatexEnvUnescapedLeft === 0,
+    'turning Fixer off did not restore the latex environment code block content');
   assert(restored.setextHeadingVisible, 'turning Fixer off left the original heading hidden');
   assert(restored.mispairedNativeOriginal === 1,
     'turning Fixer off did not restore the original mispaired native math');

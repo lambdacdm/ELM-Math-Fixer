@@ -128,7 +128,13 @@
       cursor = start + length;
     });
     candidate += source.slice(cursor);
-    return validateWithLiteralUnknownCommands(candidate).ok ? candidate : source;
+    let validationSource = candidate;
+    if (/^\$\$[\s\S]+\$\$$/.test(candidate) || /^\\\[[\s\S]+\\\]$/.test(candidate) || /^\\\([\s\S]+\\\)$/.test(candidate)) {
+      validationSource = candidate.slice(2, -2);
+    } else if (/^\$(?!\$)[^$\r\n]+\$$/.test(candidate)) {
+      validationSource = candidate.slice(1, -1);
+    }
+    return validateWithLiteralUnknownCommands(validationSource).ok ? candidate : source;
   }
 
   function hasUnresolvedDoubledBackslash(source) {
@@ -151,17 +157,38 @@
     return unsafe(source.slice(cursor));
   }
 
+  function normalizeDoubledDelimiterSegment(segment) {
+    if (/(?<!\\)\\{2,}(?=[\[\(])/.test(segment.slice(2, -2))) return segment;
+    const unwrapped = unwrapEscapedLatexLayer(segment);
+    if (unwrapped !== segment) {
+      return `${unwrapped.slice(0, 2)}${normalizeLatexBackslashes(unwrapped.slice(2, -2))}${unwrapped.slice(-2)}`;
+    }
+    const runs = segment.match(/\\{2,}/g) || [];
+    if (runs.length !== 2 || runs.some((run) => run.length % 2 !== 0)) return segment;
+    const candidate = segment.replace(/(\\+)/g, (match) => '\\'.repeat(match.length / 2));
+    const body = candidate.slice(2, -2);
+    if (!/^[\d\s\-+*/=<>.,;:!?()\[\]{}^_\u00a0]+$/.test(body)) return segment;
+    return validateWithLiteralUnknownCommands(body).ok ? candidate : segment;
+  }
+
   function normalizeMathBackslashes(text) {
-    const pattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\r\n]*?\$/g;
+    const pattern = /\\{2,}\[[\s\S]*?\\{2,}\]|\\{2,}\([\s\S]*?\\{2,}\)|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\r\n]*?\$/g;
     return text.replace(pattern, (segment) => {
-      if (segment.startsWith('$$')) {
-        return `$$${normalizeLatexBackslashes(unwrapEscapedLatexLayer(segment.slice(2, -2)))}$$`;
+      if (segment.startsWith('\\\\[') || segment.startsWith('\\\\(')) {
+        return normalizeDoubledDelimiterSegment(segment);
       }
       if (segment.startsWith('\\[') || segment.startsWith('\\(')) {
         return `${segment.slice(0, 2)}${normalizeLatexBackslashes(unwrapEscapedLatexLayer(segment.slice(2, -2)))}${segment.slice(-2)}`;
       }
+      if (segment.startsWith('$$')) {
+        return `$$${normalizeLatexBackslashes(unwrapEscapedLatexLayer(segment.slice(2, -2)))}$$`;
+      }
       return `$${normalizeLatexBackslashes(unwrapEscapedLatexLayer(segment.slice(1, -1)))}$`;
     });
+  }
+
+  function normalizeEscapedLatexText(text) {
+    return normalizeLatexBackslashes(normalizeMathBackslashes(text));
   }
 
   function normalizeMathDelimiterWhitespace(text) {
@@ -268,6 +295,8 @@
     validateWithLiteralUnknownCommands,
     normalizePairedEscapedSetBraces,
     normalizeMathBackslashes,
+    normalizeEscapedLatexText,
+    unwrapEscapedLatexLayer,
     normalizeMathDelimiterWhitespace,
     protectMathBoundaryWhitespace,
     isEscapedAt,

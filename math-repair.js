@@ -13,7 +13,8 @@
   const {
     validateWithLiteralUnknownCommands,
     normalizePairedEscapedSetBraces,
-    normalizeMathBackslashes,
+    normalizeEscapedLatexText,
+    unwrapEscapedLatexLayer,
     normalizeMathDelimiterWhitespace,
     protectMathBoundaryWhitespace,
     isEscapedAt,
@@ -27,24 +28,52 @@
   const SETEXT_OPERATOR_BY_TAG = { H1: '=', H2: '-' };
   let getMathTextCache = new WeakMap();
 
+  function isDelimitedMathText(text) {
+    return (
+      /^\$\$[\s\S]+\$\$$/.test(text) ||
+      /^\$(?!\$)[^$\r\n]+\$$/.test(text) ||
+      /^\\\[[\s\S]+\\\]$/.test(text) ||
+      /^\\\([\s\S]+\\\)$/.test(text)
+    );
+  }
+
   function getCodeWrappedMathText(code) {
     if (
       code.closest(
-        'pre, .elm-math-hidden-original, .elm-math-rescued-block, .elm-math-rescued-code, .elm-math-rescued-wrapper'
+        'pre, .elm-math-hidden-original, .elm-math-rescued-block, .elm-math-rescued-code, .elm-math-rescued-wrapper, .elm-math-code-unescaped'
       )
     ) {
       return null;
     }
 
     const text = (code.textContent || '').trim();
-    const isDelimitedMath =
-      /^\$\$[\s\S]+\$\$$/.test(text) ||
-      /^\$(?!\$)[^$\r\n]+\$$/.test(text) ||
-      /^\\\[[\s\S]+\\\]$/.test(text) ||
-      /^\\\([\s\S]+\\\)$/.test(text);
-
-    if (!isDelimitedMath) return null;
+    if (!isDelimitedMathText(text)) return null;
     return normalizeMathDelimiterWhitespace(text);
+  }
+
+  function unescapeEscapedCodeMath(container) {
+    container
+      .querySelectorAll('code[class~="language-latex"], code[class~="language-tex"]')
+      .forEach((code) => {
+        if (
+          code.closest(
+            '.elm-math-hidden-original, .elm-math-rescued-block, .elm-math-rescued-code, .elm-math-rescued-wrapper, .elm-math-code-unescaped'
+          )
+        ) {
+          return;
+        }
+
+        const raw = code.textContent || '';
+        if (!raw.includes('\\\\')) return;
+
+        const unwrapped = unwrapEscapedLatexLayer(raw);
+        const changed = unwrapped !== raw ? unwrapped : normalizeEscapedLatexText(raw);
+        if (changed === raw) return;
+
+        code.classList.add('elm-math-code-unescaped');
+        code.dataset.elmMathOriginalText = raw;
+        code.textContent = changed;
+      });
   }
 
   function rescueCodeWrappedMath(container) {
@@ -89,7 +118,8 @@
       '.elm-math-local-chain',
       '.elm-math-local-original',
       '.elm-math-local-rendered',
-      '.elm-math-native-brace-repair'
+      '.elm-math-native-brace-repair',
+      '.elm-math-code-unescaped'
     ].join(', ');
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     const candidates = [];
@@ -644,7 +674,7 @@
     let match;
 
     while ((match = segmentPattern.exec(text)) !== null) {
-      const segment = normalizeMathBackslashes(match[0]);
+      const segment = normalizeEscapedLatexText(match[0]);
       const { body, displayMode } = getMathSegmentDetails(segment);
       const result = validateWithLiteralUnknownCommands(body, { displayMode }, macros);
       if (!result.ok) return null;
@@ -664,7 +694,7 @@
     while ((node = walker.nextNode())) textNodes.push(node);
     textNodes.forEach((textNode) => {
       const normalizedText = protectMathBoundaryWhitespace(
-        normalizeMathBackslashes(textNode.textContent || '')
+        normalizeEscapedLatexText(textNode.textContent || '')
       );
       if (normalizedText !== textNode.textContent) textNode.textContent = normalizedText;
     });
@@ -746,8 +776,15 @@
           restoreSingleLineElement(el, hiddenOriginal, wrapper);
         });
       },
-      // Phase 3: rescued code + rescued text + boundary space
+      // Phase 3: rescued code + rescued text + boundary space + unescaped code
       () => {
+        document.querySelectorAll('.elm-math-code-unescaped').forEach((el) => {
+          if ('elmMathOriginalText' in el.dataset) {
+            el.textContent = el.dataset.elmMathOriginalText;
+            delete el.dataset.elmMathOriginalText;
+          }
+          el.classList.remove('elm-math-code-unescaped');
+        });
         document.querySelectorAll('.elm-math-rescued-code, .elm-math-rescued-text, .elm-math-boundary-space').forEach((host) => {
           if (host.classList.contains('elm-math-rescued-code')) {
             const original = host.querySelector(':scope > code.elm-math-code-original');
@@ -841,6 +878,7 @@
   function processContainer(container, affectedRoots = null) {
     if (!container?.isConnected) return;
     getMathTextCache = new WeakMap();
+    unescapeEscapedCodeMath(container);
 
     const allChildren = Array.from(container.querySelectorAll(TARGET_ELEMENTS));
     const affectedElements = getAffectedMathElements(container, allChildren, affectedRoots);
