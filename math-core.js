@@ -191,6 +191,13 @@
     return normalizeLatexBackslashes(normalizeMathBackslashes(text));
   }
 
+  function normalizeCodeBlockLatexLayer(text) {
+    return text.replace(
+      /(?<!\\)((?:\\{2})+)(?=[A-Za-z\[\]\(\)\{\}])/g,
+      (match) => '\\'.repeat(match.length / 2)
+    );
+  }
+
   function normalizeMathDelimiterWhitespace(text) {
     const pattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
     return text.replace(pattern, (segment) => {
@@ -296,6 +303,7 @@
     normalizePairedEscapedSetBraces,
     normalizeMathBackslashes,
     normalizeEscapedLatexText,
+    normalizeCodeBlockLatexLayer,
     unwrapEscapedLatexLayer,
     normalizeMathDelimiterWhitespace,
     protectMathBoundaryWhitespace,

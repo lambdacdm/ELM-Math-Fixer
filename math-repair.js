@@ -14,6 +14,7 @@
     validateWithLiteralUnknownCommands,
     normalizePairedEscapedSetBraces,
     normalizeEscapedLatexText,
+    normalizeCodeBlockLatexLayer,
     unwrapEscapedLatexLayer,
     normalizeMathDelimiterWhitespace,
     protectMathBoundaryWhitespace,
@@ -53,11 +54,13 @@
 
   function unescapeEscapedCodeMath(container) {
     container
-      .querySelectorAll('code[class~="language-latex"], code[class~="language-tex"]')
+      .querySelectorAll(
+        'code[class~="language-latex"], code[class~="language-tex"], pre > code[class~="language-none"]'
+      )
       .forEach((code) => {
         if (
           code.closest(
-            '.elm-math-hidden-original, .elm-math-rescued-block, .elm-math-rescued-code, .elm-math-rescued-wrapper, .elm-math-code-unescaped'
+            '.elm-math-hidden-original, .elm-math-rescued-block, .elm-math-rescued-code, .elm-math-rescued-wrapper'
           )
         ) {
           return;
@@ -67,11 +70,14 @@
         if (!raw.includes('\\\\')) return;
 
         const unwrapped = unwrapEscapedLatexLayer(raw);
-        const changed = unwrapped !== raw ? unwrapped : normalizeEscapedLatexText(raw);
+        let changed = unwrapped !== raw ? unwrapped : normalizeEscapedLatexText(raw);
+        if (!code.classList.contains('language-none')) {
+          changed = normalizeCodeBlockLatexLayer(changed);
+        }
         if (changed === raw) return;
 
         code.classList.add('elm-math-code-unescaped');
-        code.dataset.elmMathOriginalText = raw;
+        if (!code.dataset.elmMathOriginalText) code.dataset.elmMathOriginalText = raw;
         code.textContent = changed;
       });
   }
@@ -597,6 +603,12 @@
     return cursor === next;
   }
 
+  function flattenSplitInlineMath(text) {
+    return text.replace(/(?<!\$)\$(?!\$)[\s\S]*?(?<!\$)\$(?!\$)/g, (segment) =>
+      segment.includes('\n') ? segment.replace(/\s*\n\s*/g, ' ') : segment
+    );
+  }
+
   // Markdown consumes standalone "=" and "-" lines as Setext heading markers.
   // Infer them only inside one structurally continuous split display formula.
   function inferSetextOperatorRepair(group) {
@@ -950,8 +962,10 @@
       const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
       let text = hiddenOriginal ? getMathAwareText(hiddenOriginal) : getMathAwareText(el);
       const delimiterCount = (text.match(/\$\$/g) || []).length;
+      const dollarCount = (text.match(/\$(?!\$)/g) || []).length;
 
-      if (delimiterCount % 2 === 1) {
+      if (delimiterCount % 2 === 1 || dollarCount % 2 === 1) {
+        const splitDelimiter = delimiterCount % 2 === 1;
         if (hiddenOriginal) {
           restoreSingleLineElement(el, hiddenOriginal, wrapper);
           getMathTextCache.delete(el);
@@ -962,6 +976,8 @@
 
         const group = [el];
         let combinedText = text;
+        let totalDelimiters = delimiterCount;
+        let totalDollars = dollarCount;
         let foundEnd = false;
         let nextEl = el.nextElementSibling;
 
@@ -1006,7 +1022,10 @@
           group.push(nextEl);
 
           const nextDelimiterCount = (nextText.match(/\$\$/g) || []).length;
-          if (nextDelimiterCount % 2 === 1) {
+          const nextDollarCount = (nextText.match(/\$(?!\$)/g) || []).length;
+          totalDelimiters += nextDelimiterCount;
+          totalDollars += nextDollarCount;
+          if (totalDelimiters % 2 === 0 && totalDollars % 2 === 0) {
             foundEnd = true;
             i = nextIndex;
             break;
@@ -1026,9 +1045,10 @@
           });
 
           combinedText = group.map((node) => getMathAwareText(node, true)).join('\n');
+          combinedText = flattenSplitInlineMath(combinedText);
           const hasSetextHeading = group.some((node) => node.tagName === 'H1' || node.tagName === 'H2');
           const setextRepair = inferSetextOperatorRepair(group);
-          if (hasSetextHeading && !setextRepair) {
+          if (hasSetextHeading && !setextRepair && splitDelimiter) {
             i++;
             continue;
           }

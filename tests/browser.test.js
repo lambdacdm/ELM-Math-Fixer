@@ -128,6 +128,15 @@ K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
         <h2>B</h2>
         <p>C$$</p>
       </section>
+      <section class="markdown" id="inline-split-heading-case">
+        <h1>哦，我有几个问题。有
+$ \\operatorname{per}_{\\mathfrak p}
+\\left(
+I^C(0;\\epsilon,{0}^{n-1};1)
+\\right)</h1>
+        <p>-\\operatorname{Li}<em>n^{\\mathfrak p}(\\epsilon^{-1}).$】。这是在论文的哪里？在 n 是奇数的时候，你给出了\\sigma</em>{n,1}的系数。</p>
+      </section>
+      </section>
       <section class="markdown" id="setext-matrix-amp-case">
         <p>$$ \\rho_{E,\\ell}(G_{\\mathbb Q}) \\subseteq \\left\\{ \\begin{pmatrix}</p>
         <li>&amp; *\\\\ 0 &amp; * \\end{pmatrix} \\right\\}. $$</li>
@@ -190,6 +199,39 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
       </section>
       <section class="markdown" id="code-block-latex-clean">
         <pre><code class="language-latex">\\begin{aligned} a &amp;= b \\\\ c &amp;= d \\end{aligned}</code></pre>
+      </section>
+      <section class="markdown" id="code-block-none-case">
+        <pre><code class="language-none">\\begin{lemma}[{\\cite[Lemma~15]{siksek-visser}}]
+If $l^m\\nmid n$, then
+$$\\\\frac{\\\\sigma_+\\\\Phi_n(\\\\zeta_{l^m})}{\\\\Phi_n(\\\\zeta_{l^m})}=\\\\begin{cases}\\\\zeta_{l^m}^{-\\\\varphi(n)} &amp; n\\\\geq 2,\\
+-\\\\zeta_{l^m}^{-1} &amp; n=1\\\\end{cases}.$$
+\\end{lemma}</code></pre>
+      </section>
+      <section class="markdown" id="code-block-none-plain-case">
+        <pre><code class="language-none">C:\\\\Users\\\\name\\\\file.txt has no LaTeX. Also \\\\[not math\\\\].</code></pre>
+      </section>
+      <section class="markdown" id="code-block-doc-case">
+        <pre><code class="language-latex">\\documentclass[11pt]{article}
+\\usepackage{amsmath}
+\\newcommand{\\Q}{\\mathbb Q}
+\\title{A}
+\\\\author{}
+\\\\date{}
+\\\\begin{document}
+\\\\maketitle
+\\\\section{Setup}
+Let
+\\\\[
+K=\\\\Q(\\\\zeta_8),
+\\\\]
+and let $U_S^{\\\\MT}$ be the unipotent part.
+\\\\begin{lemma}
+For the depth-one basis, one has
+\\\\[
+\\\\sigma_+^* b_n^\\\\alpha=(-1)^{n+1}b_n^\\\\alpha,
+\\\\]
+\\end{lemma}
+\\\\end{document}</code></pre>
       </section>
       <section class="markdown" id="incremental-window"></section>
     </main>
@@ -256,6 +298,9 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
       })(),
       nonadjacentBlocks: document.querySelectorAll('#nonadjacent-case > .elm-math-rescued-block').length,
       paragraphHeadingBlocks: document.querySelectorAll('#paragraph-heading-case > .elm-math-rescued-block').length,
+      inlineSplitBlocks: document.querySelectorAll('#inline-split-heading-case > .elm-math-rescued-block').length,
+      inlineSplitKatex: document.querySelectorAll('#inline-split-heading-case .katex').length,
+      inlineSplitRaw: document.querySelector('#inline-split-heading-case > .elm-math-rescued-block')?.dataset.rawText,
       validInline: document.querySelectorAll('#valid-inline .katex').length,
       inlineSpacingBefore: document.querySelector('#inline-spacing > .elm-math-rescued-wrapper')?.firstChild?.textContent,
       inlineSpacingAfter: document.querySelector('#inline-spacing > .elm-math-rescued-wrapper')?.lastChild?.textContent,
@@ -310,6 +355,13 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
       codeBlockTexUnescaped: document.querySelectorAll('#code-block-tex-case code.elm-math-code-unescaped').length,
       codeBlockCleanText: document.querySelector('#code-block-latex-clean code')?.textContent,
       codeBlockCleanUnescaped: document.querySelectorAll('#code-block-latex-clean code.elm-math-code-unescaped').length,
+      codeBlockNoneText: document.querySelector('#code-block-none-case code')?.textContent,
+      codeBlockNoneUnescaped: document.querySelectorAll('#code-block-none-case code.elm-math-code-unescaped').length,
+      codeBlockNoneKatex: document.querySelectorAll('#code-block-none-case .katex').length,
+      codeBlockNonePlainText: document.querySelector('#code-block-none-plain-case code')?.textContent,
+      codeBlockNonePlainUnescaped: document.querySelectorAll('#code-block-none-plain-case code.elm-math-code-unescaped').length,
+      codeBlockDocText: document.querySelector('#code-block-doc-case code')?.textContent,
+      codeBlockDocUnescaped: document.querySelectorAll('#code-block-doc-case code.elm-math-code-unescaped').length,
       knownDoubleTex: annotation('#known-double annotation[encoding="application/x-tex"]'),
       unknownDoubleWrapper: document.querySelectorAll('#unknown-double > .elm-math-rescued-wrapper').length,
       tdEmBackslashRendered: document.querySelectorAll('#td-em-backslash .katex:not(.katex-error)').length,
@@ -352,6 +404,11 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
   assert(initial.alignment.centerDifference < 1, 'rescued display math was not centered');
   assert(initial.nonadjacentBlocks === 0, 'nonadjacent paragraphs were incorrectly joined');
   assert(initial.paragraphHeadingBlocks === 0, 'a P/H2/P chain was incorrectly treated as Setext damage');
+  assert(initial.inlineSplitBlocks === 1 && initial.inlineSplitKatex > 0,
+    `an inline formula split across a heading and paragraph was not rescued: blocks ${initial.inlineSplitBlocks}, katex ${initial.inlineSplitKatex}`);
+  assert(initial.inlineSplitRaw?.includes(
+    '$ \\operatorname{per}_{\\mathfrak p} \\left( I^C(0;\\epsilon,{0}^{n-1};1) \\right) -\\operatorname{Li}_n^{\\mathfrak p}(\\epsilon^{-1}).$'),
+    `split inline formula newlines were not flattened or underscores not restored: ${initial.inlineSplitRaw}`);
   assert(initial.validInline > 0, 'valid inline math was not rendered');
   assert(initial.inlineSpacingBefore?.endsWith('\u00a0') && initial.inlineSpacingAfter?.startsWith('\u00a0'),
     'inline math lost surrounding prose whitespace');
@@ -421,6 +478,43 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
     'language-tex block commands were not unwrapped');
   assert(initial.codeBlockCleanText === '\\begin{aligned} a &= b \\\\ c &= d \\end{aligned}' && initial.codeBlockCleanUnescaped === 0,
     'a genuine single-layer latex block was incorrectly modified');
+  assert(initial.codeBlockNoneText?.includes('\\frac{\\sigma_+\\Phi_n(\\zeta_{l^m})')
+    && !initial.codeBlockNoneText?.includes('\\\\frac')
+    && initial.codeBlockNoneText?.includes('\\begin{lemma}')
+    && !initial.codeBlockNoneText?.includes('\\\\begin{lemma}'),
+    `a language-none LaTeX block was not unwrapped: ${initial.codeBlockNoneText}`);
+  assert(initial.codeBlockNoneUnescaped === 1 && initial.codeBlockNoneKatex === 0,
+    'an unwrapped language-none LaTeX block was not left as plain code');
+  assert(initial.codeBlockNonePlainText === 'C:\\\\Users\\\\name\\\\file.txt has no LaTeX. Also \\\\[not math\\\\].'
+    && initial.codeBlockNonePlainUnescaped === 0,
+    'a genuine language-none code block was incorrectly modified');
+  const expectedDoc = [
+    '\\documentclass[11pt]{article}',
+    '\\usepackage{amsmath}',
+    '\\newcommand{\\Q}{\\mathbb Q}',
+    '\\title{A}',
+    '\\author{}',
+    '\\date{}',
+    '\\begin{document}',
+    '\\maketitle',
+    '\\section{Setup}',
+    'Let',
+    '\\[',
+    'K=\\Q(\\zeta_8),',
+    '\\]',
+    'and let $U_S^{\\MT}$ be the unipotent part.',
+    '\\begin{lemma}',
+    'For the depth-one basis, one has',
+    '\\[',
+    '\\sigma_+^* b_n^\\alpha=(-1)^{n+1}b_n^\\alpha,',
+    '\\]',
+    '\\end{lemma}',
+    '\\end{document}'
+  ].join('\n');
+  assert(initial.codeBlockDocText === expectedDoc,
+    `document-level and custom LaTeX commands were not unwrapped: ${initial.codeBlockDocText}`);
+  assert(initial.codeBlockDocUnescaped === 1,
+    'an unwrapped language-latex document block was not marked');
   assert(initial.knownDoubleTex.includes('\\alpha'), 'known doubled LaTeX command was not normalized');
   assert(!initial.knownDoubleTex.includes('\\\\alpha'), 'known command still has doubled backslashes');
   assert(initial.unknownDoubleWrapper === 0, 'unknown doubled command was modified');
@@ -473,6 +567,21 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
     streamed.textContent = 'Streaming: $\\kappa';
     document.querySelector('#single-line-cases').appendChild(streamed);
     streamed.textContent = 'Streaming: $\\kappa_1(u)$.';
+
+    const inlineSplit = document.createElement('section');
+    inlineSplit.className = 'markdown';
+    inlineSplit.id = 'streamed-inline-split-case';
+    const splitH1 = document.createElement('h1');
+    splitH1.textContent = 'Late: $\\operatorname{per}_{\\mathfrak p}\\left( I^C \\right)';
+    const splitP = document.createElement('p');
+    splitP.id = 'streamed-inline-split-tail';
+    splitP.textContent = '-\\operatorname{Li}_n^{\\mathfrak p}(\\epsilon^{-1}).$ tail.';
+    inlineSplit.appendChild(splitH1);
+    inlineSplit.appendChild(splitP);
+    document.querySelector('main').appendChild(inlineSplit);
+
+    const docCode = document.querySelector('#code-block-doc-case code');
+    docCode.textContent = '\\\\author{} and $\\\\frac{1}{2}$';
   });
   await page.waitForTimeout(700);
 
@@ -481,7 +590,10 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
     lateRendered: document.querySelectorAll('#late-inline .katex').length,
     streamedRendered: document.querySelectorAll('#streamed-inline .katex').length,
     mixedLocalChains: document.querySelectorAll('#mixed-valid-and-mispaired > .elm-math-local-chain').length,
-    mixedValidMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-rescued-text .katex').length
+    mixedValidMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-rescued-text .katex').length,
+    docCodeRepaired: document.querySelector('#code-block-doc-case code')?.textContent,
+    streamedSplitBlocks: document.querySelectorAll('#streamed-inline-split-case > .elm-math-rescued-block').length,
+    streamedSplitKatex: document.querySelectorAll('#streamed-inline-split-case .katex').length
   }));
   assert(afterMutation.setextBlocks === 1, 'repeated scanning duplicated a display formula');
   assert(afterMutation.lateRendered > 0, 'incrementally added math was not processed');
@@ -489,6 +601,10 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
     'a rapidly replaced streaming node was missed by incremental scanning');
   assert(afterMutation.mixedLocalChains === 1 && afterMutation.mixedValidMath === 2,
     'repeated scanning duplicated or skipped mixed local math repairs');
+  assert(afterMutation.docCodeRepaired === '\\author{} and $\\frac{1}{2}$',
+    `an already-repaired code block whose text was replaced was not re-repaired: ${afterMutation.docCodeRepaired}`);
+  assert(afterMutation.streamedSplitBlocks === 1 && afterMutation.streamedSplitKatex > 0,
+    `a streaming inline formula split across h1/p was not rescued on rescan: blocks ${afterMutation.streamedSplitBlocks}, katex ${afterMutation.streamedSplitKatex}`);
 
   const settleCatchUp = await page.evaluate(async () => {
     const section = document.createElement('section');
