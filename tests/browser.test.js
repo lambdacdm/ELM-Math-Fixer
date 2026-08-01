@@ -71,8 +71,16 @@ async function runMathRepairTests(browser) {
   await page.setContent(`<!doctype html><html><head><meta charset="utf-8"></head><body>
     <main>
       <section class="markdown" id="setext-case">
-        <h1>$$ \\dim \\operatorname{Hom}_G(\\chi,M_n)</h1>
-        <p>\\dim \\chi^{\\,c=(-1)^{n-1}}, $$</p>
+        <h1>$$ \dim \operatorname{Hom}_G(\chi,M_n)</h1>
+        <p>\dim \chi^{\,c=(-1)^{n-1}}, $$</p>
+      </section>
+      <section class="markdown" id="h1-multiline-equals-case">
+        <h1>$$
+E_2=
+\operatorname{Ext}^1(\mathbb Q(0),\mathbb Q(2))
+\simeq
+K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
+        <p>$$</p>
       </section>
       <section class="markdown" id="setext-chain-case">
         <h1>$$A</h1>
@@ -177,6 +185,9 @@ async function runMathRepairTests(browser) {
     return {
       setextRaw: document.querySelector('#setext-case > .elm-math-rescued-block')?.dataset.rawText,
       setextReason: document.querySelector('#setext-case > .elm-math-rescued-block')?.dataset.repairReason,
+      h1MultilineBlocks: document.querySelectorAll('#h1-multiline-equals-case > .elm-math-rescued-block').length,
+      h1MultilineRendered: document.querySelectorAll('#h1-multiline-equals-case .katex').length,
+      h1MultilineRaw: document.querySelector('#h1-multiline-equals-case > .elm-math-rescued-block')?.dataset.rawText,
       setextChainRaw: document.querySelector('#setext-chain-case > .elm-math-rescued-block')?.dataset.rawText,
       setextChainReason: document.querySelector('#setext-chain-case > .elm-math-rescued-block')?.dataset.repairReason,
       setextEmptyListRaw: document.querySelector('#setext-empty-list-case > .elm-math-rescued-block')?.dataset.rawText,
@@ -261,6 +272,10 @@ async function runMathRepairTests(browser) {
   });
   assert(initial.setextRaw?.includes('\n=\n'), 'Setext-swallowed equals was not restored');
   assert(initial.setextReason === 'setext-equals', 'Setext repair marker is missing');
+  assert(initial.h1MultilineBlocks === 1 && initial.h1MultilineRendered > 0,
+    'multiline h1 formula with a closing-only paragraph was not rescued');
+  assert(initial.h1MultilineRaw?.includes('E_2=') && !initial.h1MultilineRaw?.includes('\n=\n'),
+    'multiline h1 formula repair altered the equals sign');
   assert(initial.setextChainRaw === '$$A\n=\nB\n-\nC$$', 'Setext equals/minus chain was not restored');
   assert(initial.setextChainReason === 'setext-operators', 'Setext operator-chain marker is missing');
   assert(initial.setextEmptyListRaw === '$$A\n=\nB\n$$' && initial.setextEmptyListRendered === 1,

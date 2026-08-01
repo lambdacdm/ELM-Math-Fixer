@@ -595,7 +595,7 @@
     const nonemptyMathFragments = mathFragments.filter(Boolean);
     const hasClosingOnlyParagraph =
       mathFragments[mathFragments.length - 1] === '' && closingText === '$$';
-    if (nonemptyMathFragments.length < 2) return null;
+    if (nonemptyMathFragments.length < (hasClosingOnlyParagraph ? 1 : 2)) return null;
     if (mathFragments.some((fragment, index) => {
       if (fragment) return !isLikelyMathFragment(fragment);
       return index !== mathFragments.length - 1 || !hasClosingOnlyParagraph;
