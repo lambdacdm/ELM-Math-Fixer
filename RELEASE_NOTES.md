@@ -1,14 +1,15 @@
-# ELM Math Fixer v1.2.4
+# ELM Math Fixer v1.2.5
 
-This release unifies the double-backslash repair between the math environment and LaTeX code blocks, and fixes a KaTeX validation bug that rejected doubled delimiters.
+This release fixes math that stays unrendered when ELM streams a message in chunks, and hardens the incremental scanner so no late-arriving math is left behind.
 
-## What's New since v1.2.3
+## What's New since v1.2.4
 
 ### Fixes
-- **Doubled backslashes in `language-latex` code blocks**: LaTeX code blocks (`<code class="language-latex">`, `<code class="language-tex">`) now display correctly when ELM doubles every backslash (`\\[`, `\\frac`, `\\zeta`, ...). Whole-block unwrapping handles environments like `\begin{aligned}` (including `\\` line breaks), and per-segment handling fixes mixed blocks that contain both doubled and correct single-backslash formulas (e.g. `\\[\frac{\zeta_8^i-1}{\zeta_8^j-1},\qquad 1\leq i\ne j<8,\\]`). Delimiter-only formulas like `\\[24+42+3=69\\]` are unwrapped via a numeric-only fallback. Content is kept as code (not rendered as math). Normal code blocks, `language-text` blocks, and genuine single-layer LaTeX are never modified.
-- **Unified repair strategy**: The math environment and LaTeX code blocks now share one backslash-normalization entry point (`normalizeEscapedLatexText`). Doubled delimiters inside the math environment (`\\[...\\]`, `\\(...\\))` are repaired the same way as in code blocks, while whitespace normalization, gating, and KaTeX rendering stay math-environment-only.
-- **Validation fix**: The escaped-layer validator no longer feeds `\[`/`\]` delimiters to KaTeX (which rejects them as undefined control sequences); it validates the body only.
+- **Streaming text split across adjacent text nodes**: ELM can stream a paragraph in several text chunks, sometimes splitting a formula in half (e.g. `$S` and `$ 对维数的影响。` as two neighbouring text nodes). The mixed-text rescuer now merges adjacent text nodes and validates the combined text, so split formulas are rendered instead of staying as literal `$`.
+- **Settled re-scan of affected containers**: after an incremental repair batch, the containers involved are re-scanned 700 ms later, so math arriving just after a scan window is picked up without re-scanning the whole page.
+- **No lost mutations between disconnect and reconnect**: pending observer records are replayed before every scan and settle pass, so mutations that occur while the observer is detached are never dropped.
+- **README**: removed the note that the bundled KaTeX version matches the upstream `main` source (it no longer does).
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.4.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.5.zip`.

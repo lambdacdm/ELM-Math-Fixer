@@ -121,18 +121,28 @@
       '.elm-math-native-brace-repair',
       '.elm-math-code-unescaped'
     ].join(', ');
+    const runs = [];
+    let current = null;
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    const candidates = [];
     let node;
 
     while ((node = walker.nextNode())) {
-      if (node.parentElement?.closest(ignoredSelector)) continue;
-      if (isSafeMixedTextMath(node.textContent || '')) candidates.push(node);
+      if (node.parentElement?.closest(ignoredSelector)) {
+        current = null;
+        continue;
+      }
+      if (!current || node.previousSibling !== current.nodes[current.nodes.length - 1]) {
+        current = { nodes: [], text: '' };
+        runs.push(current);
+      }
+      current.nodes.push(node);
+      current.text += node.textContent || '';
     }
 
-    candidates.forEach((textNode) => {
+    runs.forEach((run) => {
+      if (!isSafeMixedTextMath(run.text)) return;
       const wrapper = document.createElement('span');
-      wrapper.textContent = textNode.textContent || '';
+      wrapper.textContent = run.text;
 
       try {
         renderMathInto(wrapper);
@@ -140,9 +150,10 @@
 
         const host = document.createElement('span');
         host.className = 'elm-math-rescued-text';
-        host.dataset.rawText = textNode.textContent || '';
+        host.dataset.rawText = run.text;
         while (wrapper.firstChild) host.appendChild(wrapper.firstChild);
-        textNode.replaceWith(host);
+        run.nodes[0].replaceWith(host);
+        for (let i = 1; i < run.nodes.length; i++) run.nodes[i].remove();
       } catch (error) {
         warn('failed to render mixed text math:', error);
       }

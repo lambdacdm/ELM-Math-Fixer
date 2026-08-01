@@ -124,6 +124,28 @@
     observer.observe(document.body, OBSERVER_OPTIONS);
   }
 
+  function handleMutation(mutation) {
+    pendingScanRoots.add(mutation.target);
+    if (mutation.addedNodes.length > 0) {
+      mutation.addedNodes.forEach((node) => pendingScanRoots.add(node));
+    }
+    if (mutation.type === 'attributes' && affectsMathVisibility(mutation.target)) {
+      pendingSettleScan = true;
+      if (
+        mutation.attributeName === 'hidden' ||
+        mutation.attributeName === 'aria-hidden' ||
+        affectsMathContainerBoundary(mutation.target)
+      ) {
+        pendingFullScan = true;
+      }
+    }
+
+    if (!isInsideMathContent(mutation.target)) pendingUiRefresh = true;
+    mutation.addedNodes.forEach((node) => {
+      if (!isInsideMathContent(node)) pendingUiRefresh = true;
+    });
+  }
+
   const observer = new MutationObserver((mutations) => {
     clearTimeout(settleTimer);
     if (location.href !== lastObservedUrl) {
@@ -132,32 +154,16 @@
       pendingSettleScan = true;
     }
 
-    mutations.forEach((mutation) => {
-      pendingScanRoots.add(mutation.target);
-      if (mutation.addedNodes.length > 0) {
-        mutation.addedNodes.forEach((node) => pendingScanRoots.add(node));
-      }
-      if (mutation.type === 'attributes' && affectsMathVisibility(mutation.target)) {
-        pendingSettleScan = true;
-        if (
-          mutation.attributeName === 'hidden' ||
-          mutation.attributeName === 'aria-hidden' ||
-          affectsMathContainerBoundary(mutation.target)
-        ) {
-          pendingFullScan = true;
-        }
-      }
-
-      if (!isInsideMathContent(mutation.target)) pendingUiRefresh = true;
-      mutation.addedNodes.forEach((node) => {
-        if (!isInsideMathContent(node)) pendingUiRefresh = true;
-      });
-    });
+    mutations.forEach(handleMutation);
 
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
+      observer.takeRecords().forEach(handleMutation);
       const roots = pendingFullScan ? [document] : Array.from(pendingScanRoots);
-      const shouldSettle = pendingSettleScan;
+      const shouldSettle = pendingSettleScan || !pendingFullScan;
+      const settleRoots = roots.includes(document)
+        ? roots
+        : collectScanJobs(roots).map((job) => job.container);
       pendingScanRoots.clear();
       const refreshUi =
         pendingUiRefresh ||
@@ -175,9 +181,10 @@
 
       if (shouldSettle) {
         settleTimer = setTimeout(() => {
+          observer.takeRecords().forEach(handleMutation);
           observer.disconnect();
           try {
-            scan(roots, false);
+            scan(settleRoots, false);
           } finally {
             observePage();
           }

@@ -490,6 +490,46 @@ points, matching \\[ -2+2\\zeta_8 \\].</code></pre>
   assert(afterMutation.mixedLocalChains === 1 && afterMutation.mixedValidMath === 2,
     'repeated scanning duplicated or skipped mixed local math repairs');
 
+  const settleCatchUp = await page.evaluate(async () => {
+    const section = document.createElement('section');
+    section.id = 'settle-tail-case';
+    section.className = 'markdown';
+    const nativeSpan = (source) =>
+      `<span><span class="katex" data-copytex-latex="${source}"><span class="katex-mathml"><math><semantics><mrow><mtext>${source}</mtext></mrow><annotation encoding="application/x-tex">${source}</annotation></semantics></math></span></span></span>`;
+    section.innerHTML = `<p id="settle-chain">有限集合 $S${nativeSpan('对')}n&gt;1${nativeSpan('的 rational rank 没有影响，因为 localization sequence 中有限域的 higher')}K$</p>`;
+    document.querySelector('main').appendChild(section);
+
+    const originalObserve = globalThis.MutationObserver.prototype.observe;
+    globalThis.MutationObserver.prototype.observe = function () {};
+    globalThis.__elmRestoreObserve = () => {
+      globalThis.MutationObserver.prototype.observe = originalObserve;
+    };
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const chainBefore = document.querySelectorAll('#settle-chain .elm-math-local-rendered .katex').length;
+    const chain = document.querySelector('#settle-chain');
+    chain.appendChild(document.createTextNode('-groups 只贡献 torsion。因此对 $n>1$，大体可以忽略 $S'));
+    chain.appendChild(document.createTextNode('$ 对维数的影响。'));
+    globalThis.__elmRestoreObserve();
+    delete globalThis.__elmRestoreObserve;
+
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    return {
+      chainBefore,
+      chainAfter: document.querySelectorAll('#settle-chain .elm-math-local-rendered .katex').length,
+      tailRescued: document.querySelectorAll('#settle-chain .elm-math-rescued-text').length,
+      tailMath: document.querySelectorAll('#settle-chain .elm-math-rescued-text .katex').length
+    };
+  });
+  assert(settleCatchUp.chainBefore > 0,
+    'the native chain was not repaired before the tail arrived');
+  assert(settleCatchUp.chainAfter === settleCatchUp.chainBefore,
+    'the settle scan duplicated the repaired chain content');
+  assert(settleCatchUp.tailRescued === 1 && settleCatchUp.tailMath === 2,
+    `a streaming tail split across adjacent text nodes was not rescued: rescued ${settleCatchUp.tailRescued}, rendered ${settleCatchUp.tailMath}`);
+
   const segmentCacheCalls = await page.evaluate(() => {
     let calls = 0;
     const original = globalThis.katex.renderToString.bind(globalThis.katex);
