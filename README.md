@@ -13,7 +13,7 @@ ELM Math Fixer is a small Chrome extension that improves KaTeX math rendering on
 
 For best results, use the included Math Rendering Fix prompt alongside the extension, although it is not required.
 
-Extension version: 1.2.6.
+Extension version: 1.2.7.
 
 Bundled KaTeX version: [0.17.0](https://github.com/KaTeX/KaTeX).
 
@@ -30,6 +30,8 @@ ELM appears to parse Markdown before KaTeX, so formulas can be altered or split 
 
 Repairs run only when the DOM matches a known failure pattern. Each repair uses pattern-specific structural checks and, where appropriate, KaTeX validation.
 
+In short: if a formula ends up split, unrendered, or shown as plain text, the extension repairs it automatically.
+
 It also adds a small prompt picker to the ELM chat page, so you can copy recommended math-formatting prompts without changing your ELM account automatically.
 
 ## How to Use
@@ -44,6 +46,8 @@ It also adds a small prompt picker to the ELM chat page, so you can copy recomme
 4. Click **Load unpacked**.
 5. Select the `ELM-Math-Fixer` folder.
 6. Open or refresh `https://elm.edina.ac.uk/`.
+
+No setup is needed — the extension works automatically after you refresh ELM.
 
 ## Privacy
 
@@ -62,7 +66,7 @@ ELM Math Fixer 是一个小型 Chrome 扩展，用于改善爱丁堡大学 [ELM 
 
 为获得最佳效果，建议将插件与内置的 Math Rendering Fix 提示词配合使用，但这不是必需的。
 
-插件版本：1.2.6。
+插件版本：1.2.7。
 
 内置 KaTeX 版本：[0.17.0](https://github.com/KaTeX/KaTeX)。
 
@@ -79,6 +83,8 @@ ELM 平台看起来会先解析 Markdown，再交给 KaTeX，因此公式可能�
 
 插件只在 DOM 符合已知错误特征时执行修复。每类修复都有对应的结构检查，并在适用时使用 KaTeX 校验。
 
+简而言之：公式被拆散、显示不出来或变成普通文字的情况，插件都会自动修复。
+
 它也会在 ELM 聊天页面添加一个小型提示词选择器，方便你复制推荐的数学格式提示词；插件不会自动修改你的 ELM 账号设置。
 
 ## 如何使用
@@ -93,6 +99,8 @@ ELM 平台看起来会先解析 Markdown，再交给 KaTeX，因此公式可能�
 4. 点击 **加载已解压的扩展程序**。
 5. 选择 `ELM-Math-Fixer` 文件夹。
 6. 打开或刷新 `https://elm.edina.ac.uk/`。
+
+安装后无需任何设置，刷新 ELM 页面即自动生效。
 
 ## 隐私
 

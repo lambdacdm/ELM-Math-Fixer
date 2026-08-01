@@ -136,6 +136,37 @@ I^C(0;\\epsilon,{0}^{n-1};1)
 \\right)</h1>
         <p>-\\operatorname{Li}<em>n^{\\mathfrak p}(\\epsilon^{-1}).$】。这是在论文的哪里？在 n 是奇数的时候，你给出了\\sigma</em>{n,1}的系数。</p>
       </section>
+      <section class="markdown" id="inline-newline-case">
+        <p>Formula $L_1 +
+M_2$ spans lines.</p>
+      </section>
+      <section class="markdown" id="bracket-split-case">
+        <p>\\[x +</p>
+        <p>y\\]</p>
+      </section>
+      <section class="markdown" id="paren-split-case">
+        <p>\\(a +</p>
+        <p>b\\)</p>
+      </section>
+      <section class="markdown" id="bracket-nonadjacent-case">
+        <p>\\[A</p>
+        <div><p>B\\]</p></div>
+      </section>
+      <section class="markdown" id="native-split-case">
+        <li>
+          <h1><span class="elm-math-rescued-text" data-raw-text="对于扩张
+$$
+M\in \\Ext^1_{\\MT(\\mathcal O_{K,S})}(\\mathbb Q(0),\\mathbb Q(n)),\\qquad n\\ge 1,
+$$
+相应的矩阵系数函数 ">对于扩张
+<span><span class="katex-display"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mtext>M</mtext></mrow><annotation encoding="application/x-tex">M\in \\Ext^1_{\\MT(\\mathcal O_{K,S})}(\\mathbb Q(0),\\mathbb Q(n)),\\qquad n\\ge 1,</annotation></semantics></math></span></span></span></span>
+相应的矩阵系数函数 </span><span><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mtext>f</mtext></mrow><annotation encoding="application/x-tex">f_M\\in A(Z)</annotation></semantics></math></span></span></span> 满足
+$$
+f_M(\\eta_{\\fp}^{\\ur})</h1>
+\\exp_{\\mathrm{BK}}^{-1}(M_{\\fp})\\in K_{\\fp}.
+$$
+        </li>
+      </section>
       </section>
       <section class="markdown" id="setext-matrix-amp-case">
         <p>$$ \\rho_{E,\\ell}(G_{\\mathbb Q}) \\subseteq \\left\\{ \\begin{pmatrix}</p>
@@ -163,6 +194,7 @@ I^C(0;\\epsilon,{0}^{n-1};1)
         <p id="code-math"><code>$a_1$</code></p>
         <p id="known-double">$\\\\alpha + 1$</p>
         <p id="unknown-double">$\\\\notARealCommand + 1$</p>
+        <p id="unknown-command-math">With $U_S^{\\MT}$ and $1-\\zeta$.</p>
       </section>
       <section class="markdown" id="table-cases">
         <table><tbody>
@@ -301,6 +333,20 @@ For the depth-one basis, one has
       inlineSplitBlocks: document.querySelectorAll('#inline-split-heading-case > .elm-math-rescued-block').length,
       inlineSplitKatex: document.querySelectorAll('#inline-split-heading-case .katex').length,
       inlineSplitRaw: document.querySelector('#inline-split-heading-case > .elm-math-rescued-block')?.dataset.rawText,
+      inlineNewlineRendered: document.querySelectorAll('#inline-newline-case .katex').length,
+      inlineNewlineRaw: document.querySelector('#inline-newline-case .elm-math-rescued-wrapper')?.dataset.rawText,
+      unknownMathWrapper: document.querySelectorAll('#unknown-command-math > .elm-math-rescued-wrapper').length,
+      unknownMathKatex: document.querySelectorAll('#unknown-command-math .katex').length,
+      unknownMathTex: annotation('#unknown-command-math annotation[encoding="application/x-tex"]'),
+      bracketSplitBlocks: document.querySelectorAll('#bracket-split-case > .elm-math-rescued-block').length,
+      bracketSplitKatex: document.querySelectorAll('#bracket-split-case .katex').length,
+      parenSplitBlocks: document.querySelectorAll('#paren-split-case > .elm-math-rescued-block').length,
+      parenSplitKatex: document.querySelectorAll('#paren-split-case .katex').length,
+      bracketNonadjacentBlocks: document.querySelectorAll('#bracket-nonadjacent-case > .elm-math-rescued-block').length,
+      nativeSplitBlocks: document.querySelectorAll('#native-split-case .elm-math-rescued-block').length,
+      nativeSplitKatex: document.querySelectorAll('#native-split-case .elm-math-rescued-block .katex').length,
+      nativeSplitRaw: document.querySelector('#native-split-case .elm-math-rescued-block')?.dataset.rawText,
+      nativeSplitHidden: document.querySelectorAll('#native-split-case .elm-math-split-original').length,
       validInline: document.querySelectorAll('#valid-inline .katex').length,
       inlineSpacingBefore: document.querySelector('#inline-spacing > .elm-math-rescued-wrapper')?.firstChild?.textContent,
       inlineSpacingAfter: document.querySelector('#inline-spacing > .elm-math-rescued-wrapper')?.lastChild?.textContent,
@@ -409,6 +455,28 @@ For the depth-one basis, one has
   assert(initial.inlineSplitRaw?.includes(
     '$ \\operatorname{per}_{\\mathfrak p} \\left( I^C(0;\\epsilon,{0}^{n-1};1) \\right) -\\operatorname{Li}_n^{\\mathfrak p}(\\epsilon^{-1}).$'),
     `split inline formula newlines were not flattened or underscores not restored: ${initial.inlineSplitRaw}`);
+  assert(initial.inlineNewlineRendered > 0,
+    `an inline formula spanning lines inside a single element was not rescued: ${initial.inlineNewlineRendered}`);
+  assert(initial.inlineNewlineRaw?.includes('$L_1 + M_2$'),
+    `inline formula newlines were not flattened in the single-element path: ${initial.inlineNewlineRaw}`);
+  assert(initial.unknownMathWrapper === 1 && initial.unknownMathKatex === 2,
+    `an inline formula with an unknown command was not rendered literally: wrapper ${initial.unknownMathWrapper}, katex ${initial.unknownMathKatex}`);
+  assert(initial.unknownMathTex?.includes('\\MT'),
+    `the unknown command was not rendered as a visible literal: ${initial.unknownMathTex}`);
+  assert(initial.bracketSplitBlocks === 1 && initial.bracketSplitKatex > 0,
+    `a \\[ formula split across paragraphs was not rescued: blocks ${initial.bracketSplitBlocks}, katex ${initial.bracketSplitKatex}`);
+  assert(initial.parenSplitBlocks === 1 && initial.parenSplitKatex > 0,
+    `a \\( formula split across paragraphs was not rescued: blocks ${initial.parenSplitBlocks}, katex ${initial.parenSplitKatex}`);
+  assert(initial.bracketNonadjacentBlocks === 0,
+    'nonadjacent \\[ fragments were incorrectly joined');
+  assert(initial.nativeSplitBlocks === 1 && initial.nativeSplitKatex > 0,
+    `a display formula split across a native-rendered heading and paragraph was not rescued: blocks ${initial.nativeSplitBlocks}, katex ${initial.nativeSplitKatex}`);
+  assert(initial.nativeSplitHidden === 2,
+    `split originals were not hidden after rescue: ${initial.nativeSplitHidden}`);
+  assert(initial.nativeSplitRaw?.includes('f_M(\\eta') && initial.nativeSplitRaw?.includes('\\exp_{\\mathrm{BK}}'),
+    `a split display formula after native katex was not joined cleanly: ${initial.nativeSplitRaw}`);
+  assert(!initial.nativeSplitRaw?.includes('A(Z)'),
+    `a native katex annotation leaked into the rescued math: ${initial.nativeSplitRaw}`);
   assert(initial.validInline > 0, 'valid inline math was not rendered');
   assert(initial.inlineSpacingBefore?.endsWith('\u00a0') && initial.inlineSpacingAfter?.startsWith('\u00a0'),
     'inline math lost surrounding prose whitespace');
@@ -580,6 +648,13 @@ For the depth-one basis, one has
     inlineSplit.appendChild(splitP);
     document.querySelector('main').appendChild(inlineSplit);
 
+    const newlineRun = document.createElement('p');
+    newlineRun.id = 'streamed-newline-run';
+    newlineRun.innerHTML = 'Native <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mtext>q</mtext></mrow><annotation encoding="application/x-tex">q</annotation></semantics></math></span></span> text';
+    document.querySelector('#single-line-cases').appendChild(newlineRun);
+    newlineRun.appendChild(document.createTextNode(' with $\\alpha +'));
+    newlineRun.appendChild(document.createTextNode('\n\\beta$. done'));
+
     const docCode = document.querySelector('#code-block-doc-case code');
     docCode.textContent = '\\\\author{} and $\\\\frac{1}{2}$';
   });
@@ -593,7 +668,9 @@ For the depth-one basis, one has
     mixedValidMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-rescued-text .katex').length,
     docCodeRepaired: document.querySelector('#code-block-doc-case code')?.textContent,
     streamedSplitBlocks: document.querySelectorAll('#streamed-inline-split-case > .elm-math-rescued-block').length,
-    streamedSplitKatex: document.querySelectorAll('#streamed-inline-split-case .katex').length
+    streamedSplitKatex: document.querySelectorAll('#streamed-inline-split-case .katex').length,
+    streamedNewlineRunRescued: document.querySelectorAll('#streamed-newline-run .elm-math-rescued-text').length,
+    streamedNewlineRunKatex: document.querySelectorAll('#streamed-newline-run .elm-math-rescued-text .katex').length
   }));
   assert(afterMutation.setextBlocks === 1, 'repeated scanning duplicated a display formula');
   assert(afterMutation.lateRendered > 0, 'incrementally added math was not processed');
@@ -605,6 +682,8 @@ For the depth-one basis, one has
     `an already-repaired code block whose text was replaced was not re-repaired: ${afterMutation.docCodeRepaired}`);
   assert(afterMutation.streamedSplitBlocks === 1 && afterMutation.streamedSplitKatex > 0,
     `a streaming inline formula split across h1/p was not rescued on rescan: blocks ${afterMutation.streamedSplitBlocks}, katex ${afterMutation.streamedSplitKatex}`);
+  assert(afterMutation.streamedNewlineRunRescued === 1 && afterMutation.streamedNewlineRunKatex > 0,
+    `a streaming formula split across text nodes with a newline was not rescued: rescued ${afterMutation.streamedNewlineRunRescued}, katex ${afterMutation.streamedNewlineRunKatex}`);
 
   const settleCatchUp = await page.evaluate(async () => {
     const section = document.createElement('section');

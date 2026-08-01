@@ -8,6 +8,19 @@
 
   const hasMath = (text) => text.includes('$') || text.includes('\\(') || text.includes('\\[');
 
+  function countMathDelimiters(text) {
+    const tokens = text.match(/\$\$|\$(?!\$)|\\[\[\]()]/g) || [];
+    let delimiters = 0;
+    let dollars = 0;
+    let brackets = 0;
+    for (const token of tokens) {
+      if (token === '$$') delimiters++;
+      else if (token === '$') dollars++;
+      else brackets++;
+    }
+    return { delimiters, dollars, brackets };
+  }
+
   const CORE = globalThis.ELMMathFixerCore;
   if (!CORE) throw new Error('ELM Math Fixer core failed to load.');
   const {
@@ -146,17 +159,18 @@
     }
 
     runs.forEach((run) => {
-      if (!isSafeMixedTextMath(run.text)) return;
+      const runText = run.text.includes('\n') ? flattenSplitInlineMath(run.text) : run.text;
+      if (!isSafeMixedTextMath(runText, { allowUndefinedCommands: true })) return;
       const wrapper = document.createElement('span');
-      wrapper.textContent = run.text;
+      wrapper.textContent = runText;
 
       try {
-        renderMathInto(wrapper);
+        renderMathInto(wrapper, { allowUndefinedCommands: true });
         if (!wrapper.querySelector('.katex') || wrapper.querySelector('.katex-error')) return;
 
         const host = document.createElement('span');
         host.className = 'elm-math-rescued-text';
-        host.dataset.rawText = run.text;
+        host.dataset.rawText = runText;
         while (wrapper.firstChild) host.appendChild(wrapper.firstChild);
         run.nodes[0].replaceWith(host);
         for (let i = 1; i < run.nodes.length; i++) run.nodes[i].remove();
@@ -567,6 +581,7 @@
   }
 
   function getMathAwareText(el, assumeMath = false) {
+    if (el.nodeType === Node.TEXT_NODE) return el.nodeValue || '';
     if (assumeMath) {
       const cached = getMathTextCache.get(el);
       if (cached !== undefined) return cached;
@@ -574,6 +589,24 @@
     const text = getMathAwareClone(el, assumeMath).textContent || '';
     if (assumeMath) getMathTextCache.set(el, text);
     return text;
+  }
+
+  const RENDERED_EXCLUDE_SELECTOR = [
+    '.katex',
+    '.katex-display',
+    '.elm-math-rescued-text',
+    '.elm-math-rescued-wrapper',
+    '.elm-math-rescued-block',
+    '.elm-math-rescued-code',
+    '.elm-math-hidden-original',
+    '.elm-math-local-chain',
+    '.elm-math-local-rendered'
+  ].join(', ');
+
+  function getMathAwareTextExcludingRendered(el, assumeMath = false) {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll(RENDERED_EXCLUDE_SELECTOR).forEach((node) => node.remove());
+    return getMathAwareClone(clone, assumeMath).textContent || '';
   }
 
   function isLikelyMathFragment(text) {
@@ -587,18 +620,23 @@
   }
 
   function isEmptySplitListMarker(node) {
-    if (!node?.matches('ol, ul') || node.children.length !== 1) return false;
+    if (node?.nodeType !== Node.ELEMENT_NODE) return false;
+    if (!node.matches('ol, ul') || node.children.length !== 1) return false;
     const item = node.firstElementChild;
     return item?.tagName === 'LI' && !(item.textContent || '').trim();
   }
 
   function hasOnlyAllowedSplitSeparators(previous, next) {
-    let cursor = previous.nextElementSibling;
+    let cursor = previous.nextSibling;
     let emptyListCount = 0;
     while (cursor && cursor !== next) {
-      if (!isEmptySplitListMarker(cursor) || emptyListCount > 0) return false;
-      emptyListCount++;
-      cursor = cursor.nextElementSibling;
+      if (cursor.nodeType === Node.ELEMENT_NODE) {
+        if (!isEmptySplitListMarker(cursor) || emptyListCount > 0) return false;
+        emptyListCount++;
+      } else if (cursor.nodeType === Node.TEXT_NODE && (cursor.nodeValue || '').trim()) {
+        return false;
+      }
+      cursor = cursor.nextSibling;
     }
     return cursor === next;
   }
@@ -691,7 +729,9 @@
     return clone;
   }
 
+  const literalMacroCache = new Map();
   function collectLiteralUnknownCommandMacros(text) {
+    if (literalMacroCache.has(text)) return literalMacroCache.get(text);
     const segmentPattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
     const macros = {};
     let match;
@@ -704,6 +744,10 @@
       Object.assign(macros, result.macros);
     }
 
+    if (literalMacroCache.size >= 500) {
+      literalMacroCache.delete(literalMacroCache.keys().next().value);
+    }
+    literalMacroCache.set(text, macros);
     return macros;
   }
 
@@ -733,7 +777,7 @@
         { left: '\\(', right: '\\)', display: false },
         { left: '$', right: '$', display: false }
       ],
-      ...(macros ? { macros } : {}),
+      ...(macros ? { macros: { ...macros } } : {}),
       throwOnError: false
     });
   }
@@ -750,15 +794,33 @@
     }
   }
 
-  function hideSplitOriginal(el) {
-    if (!el.classList.contains('elm-math-split-original')) {
-      el.dataset.elmMathOriginalDisplay = el.style.display;
-      el.classList.add('elm-math-split-original');
+  function hideSplitOriginal(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (!node.parentNode) return;
+      const span = document.createElement('span');
+      span.className = 'elm-math-split-original';
+      span.dataset.elmMathWrappedText = '1';
+      node.parentNode.replaceChild(span, node);
+      span.appendChild(node);
+      span.style.display = 'none';
+      return;
     }
-    el.style.display = 'none';
+    if (!node.classList.contains('elm-math-split-original')) {
+      node.dataset.elmMathOriginalDisplay = node.style.display;
+      node.classList.add('elm-math-split-original');
+    }
+    node.style.display = 'none';
   }
 
   function restoreSplitOriginal(el) {
+    if (el.dataset.elmMathWrappedText) {
+      const parent = el.parentNode;
+      if (parent) {
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      }
+      el.remove();
+      return;
+    }
     el.style.display = el.dataset.elmMathOriginalDisplay || '';
     delete el.dataset.elmMathOriginalDisplay;
     el.classList.remove('elm-math-split-original');
@@ -946,25 +1008,34 @@
       }
 
       if (hasNativeRenderedMath(el)) {
-        if (rescueMispairedNativeInlineMath(el)) {
-          protectNativeMathBoundaryWhitespace(el);
-          rescueMixedTextMath(el);
+        rescueMispairedNativeInlineMath(el);
+        protectNativeMathBoundaryWhitespace(el);
+        rescueMixedTextMath(el);
+        if (!hasMath(el.textContent || '')) {
           i++;
           continue;
         }
-        protectNativeMathBoundaryWhitespace(el);
-        rescueMixedTextMath(el);
-        i++;
-        continue;
+        const nativeCounts = countMathDelimiters(getMathAwareTextExcludingRendered(el));
+        if (
+          nativeCounts.delimiters % 2 === 0 &&
+          nativeCounts.dollars % 2 === 0 &&
+          nativeCounts.brackets % 2 === 0
+        ) {
+          i++;
+          continue;
+        }
       }
 
       const hiddenOriginal = el.querySelector(':scope > .elm-math-hidden-original');
       const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
-      let text = hiddenOriginal ? getMathAwareText(hiddenOriginal) : getMathAwareText(el);
-      const delimiterCount = (text.match(/\$\$/g) || []).length;
-      const dollarCount = (text.match(/\$(?!\$)/g) || []).length;
+      let text = hiddenOriginal
+        ? getMathAwareText(hiddenOriginal)
+        : false
+          ? getMathAwareTextExcludingRendered(el)
+          : getMathAwareText(el);
+      const { delimiters: delimiterCount, dollars: dollarCount, brackets: bracketCount } = countMathDelimiters(text);
 
-      if (delimiterCount % 2 === 1 || dollarCount % 2 === 1) {
+      if (delimiterCount % 2 === 1 || dollarCount % 2 === 1 || bracketCount % 2 === 1) {
         const splitDelimiter = delimiterCount % 2 === 1;
         if (hiddenOriginal) {
           restoreSingleLineElement(el, hiddenOriginal, wrapper);
@@ -978,12 +1049,49 @@
         let combinedText = text;
         let totalDelimiters = delimiterCount;
         let totalDollars = dollarCount;
+        let totalBrackets = bracketCount;
         let foundEnd = false;
-        let nextEl = el.nextElementSibling;
+        let nextNode = el.nextSibling;
 
-        while (nextEl && group.length < MAX_SPLIT_MATH_NODES) {
+        while (nextNode && group.length < MAX_SPLIT_MATH_NODES) {
+          if (nextNode.nodeType === Node.TEXT_NODE && !(nextNode.nodeValue || '').trim()) {
+            nextNode = nextNode.nextSibling;
+            continue;
+          }
+          if (nextNode.nodeType === Node.TEXT_NODE) {
+            const nextText = nextNode.nodeValue || '';
+            const previousEl = group[group.length - 1];
+            if (
+              nextNode.parentElement !== el.parentElement ||
+              !hasOnlyAllowedSplitSeparators(previousEl, nextNode)
+            ) {
+              break;
+            }
+            if (combinedText.length + nextText.length + 1 > MAX_SPLIT_MATH_LENGTH) break;
+            combinedText += `\n${nextText}`;
+            group.push(nextNode);
+
+            const nextCounts = countMathDelimiters(nextText);
+            totalDelimiters += nextCounts.delimiters;
+            totalDollars += nextCounts.dollars;
+            totalBrackets += nextCounts.brackets;
+            if (totalDelimiters % 2 === 0 && totalDollars % 2 === 0 && totalBrackets % 2 === 0) {
+              foundEnd = true;
+              i = children.indexOf(previousEl);
+              break;
+            }
+
+            nextNode = nextNode.nextSibling;
+            continue;
+          }
+          if (nextNode.nodeType !== Node.ELEMENT_NODE) {
+            nextNode = nextNode.nextSibling;
+            continue;
+          }
+
+          const nextEl = nextNode;
           if (isEmptySplitListMarker(nextEl)) {
-            nextEl = nextEl.nextElementSibling;
+            nextNode = nextEl.nextSibling;
             continue;
           }
 
@@ -995,7 +1103,7 @@
           const nextIndex = children.indexOf(effectiveEl);
           if (nextIndex < 0) break;
           if (effectiveEl.closest('.elm-math-rescued-block')) {
-            nextEl = nextEl.nextElementSibling;
+            nextNode = nextEl.nextSibling;
             continue;
           }
 
@@ -1015,27 +1123,30 @@
           const nextHidden = effectiveEl.querySelector(':scope > .elm-math-hidden-original');
           const nextText = nextHidden
             ? getMathAwareText(nextHidden, true)
-            : getMathAwareText(effectiveEl, true);
+            : hasNativeRenderedMath(effectiveEl)
+              ? getMathAwareTextExcludingRendered(effectiveEl, true)
+              : getMathAwareText(effectiveEl, true);
 
           if (combinedText.length + nextText.length + 1 > MAX_SPLIT_MATH_LENGTH) break;
           combinedText += `\n${nextText}`;
           group.push(nextEl);
 
-          const nextDelimiterCount = (nextText.match(/\$\$/g) || []).length;
-          const nextDollarCount = (nextText.match(/\$(?!\$)/g) || []).length;
-          totalDelimiters += nextDelimiterCount;
-          totalDollars += nextDollarCount;
-          if (totalDelimiters % 2 === 0 && totalDollars % 2 === 0) {
+          const nextCounts = countMathDelimiters(nextText);
+          totalDelimiters += nextCounts.delimiters;
+          totalDollars += nextCounts.dollars;
+          totalBrackets += nextCounts.brackets;
+          if (totalDelimiters % 2 === 0 && totalDollars % 2 === 0 && totalBrackets % 2 === 0) {
             foundEnd = true;
             i = nextIndex;
             break;
           }
 
-          nextEl = nextEl.nextElementSibling;
+          nextNode = nextEl.nextSibling;
         }
 
         if (foundEnd) {
           group.forEach((node) => {
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
             const hidden = node.querySelector(':scope > .elm-math-hidden-original');
             const oldWrapper = node.querySelector(':scope > .elm-math-rescued-wrapper');
             if (hidden) {
@@ -1044,18 +1155,27 @@
             }
           });
 
-          combinedText = group.map((node) => getMathAwareText(node, true)).join('\n');
+          combinedText = group
+            .map((node) =>
+              node.nodeType === Node.TEXT_NODE
+                ? node.nodeValue || ''
+                : hasNativeRenderedMath(node)
+                  ? getMathAwareTextExcludingRendered(node, true)
+                  : getMathAwareText(node, true)
+            )
+            .join('\n');
           combinedText = flattenSplitInlineMath(combinedText);
           const hasSetextHeading = group.some((node) => node.tagName === 'H1' || node.tagName === 'H2');
           const setextRepair = inferSetextOperatorRepair(group);
-          if (hasSetextHeading && !setextRepair && splitDelimiter) {
+          const nativeGroupHead = hasNativeRenderedMath(group[0]);
+          if (hasSetextHeading && !setextRepair && splitDelimiter && !nativeGroupHead) {
             i++;
             continue;
           }
           if (setextRepair) combinedText = setextRepair.text;
           if (
             !isSafeMixedTextMath(combinedText, {
-              allowUndefinedCommands: Boolean(setextRepair)
+              allowUndefinedCommands: true
             })
           ) {
             i++;
@@ -1086,7 +1206,7 @@
           mathBlock.textContent = combinedText;
 
           try {
-            renderMathInto(mathBlock, { allowUndefinedCommands: Boolean(setextRepair) });
+            renderMathInto(mathBlock, { allowUndefinedCommands: true });
             if (!mathBlock.querySelector('.katex') || mathBlock.querySelector('.katex-error')) {
               throw new Error('split display math did not render cleanly');
             }
@@ -1099,9 +1219,10 @@
           }
         }
       } else if (hasMath(text)) {
-        const cleanedText = normalizeMathDelimiterWhitespace(text);
+        const trimmedText = normalizeMathDelimiterWhitespace(text);
+        const cleanedText = trimmedText.includes('\n') ? flattenSplitInlineMath(trimmedText) : trimmedText;
 
-        if (!isSafeMixedTextMath(cleanedText)) {
+        if (!isSafeMixedTextMath(cleanedText, { allowUndefinedCommands: true })) {
           if (hiddenOriginal) restoreSingleLineElement(el, hiddenOriginal, wrapper);
           i++;
           continue;
@@ -1117,6 +1238,15 @@
         }
 
         const freshClone = cleanMathClone(getMathAwareClone(el));
+        if ((freshClone.textContent || '').includes('\n')) {
+          const textNodes = [];
+          const walker = document.createTreeWalker(freshClone, NodeFilter.SHOW_TEXT);
+          let textNode;
+          while ((textNode = walker.nextNode())) textNodes.push(textNode);
+          textNodes.forEach((node) => {
+            node.textContent = flattenSplitInlineMath(node.textContent || '');
+          });
+        }
         const freshText = freshClone.textContent || '';
         const mathWrapper = document.createElement('span');
         mathWrapper.className = 'elm-math-rescued-wrapper';
@@ -1124,7 +1254,7 @@
         while (freshClone.firstChild) mathWrapper.appendChild(freshClone.firstChild);
 
         try {
-          renderMathInto(mathWrapper);
+          renderMathInto(mathWrapper, { allowUndefinedCommands: true });
           if (!mathWrapper.querySelector('.katex') || mathWrapper.querySelector('.katex-error')) {
             throw new Error('inline math did not render cleanly');
           }
