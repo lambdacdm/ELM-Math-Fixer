@@ -93,6 +93,13 @@ K_3(\mathbb Z[1/6])\otimes\mathbb Q</h1>
         <ol start="2"><li></li></ol>
         <p>$$</p>
       </section>
+      <section class="markdown" id="split-marker-case">
+        <h1>$$
+f_M(\\eta_{\\fp})</h1>
+        <ul><li></li></ul>
+        <p>\\exp_{\\mathrm{BK}}^{-1}(M_{\\fp}).
+$$</p>
+      </section>
       <section class="markdown" id="setext-subscript-case">
         <h1>$$ X(\\mathbb Z_p)<em>{S,\\Pi</em>{\\mathrm{orb}}}</h1>
         <p>X(\\mathbb Z_p)_{S,\\PL^\\sigma}. $$</p>
@@ -347,6 +354,9 @@ For the depth-one basis, one has
       nativeSplitKatex: document.querySelectorAll('#native-split-case .elm-math-rescued-block .katex').length,
       nativeSplitRaw: document.querySelector('#native-split-case .elm-math-rescued-block')?.dataset.rawText,
       nativeSplitHidden: document.querySelectorAll('#native-split-case .elm-math-split-original').length,
+      splitMarkerBlocks: document.querySelectorAll('#split-marker-case > .elm-math-rescued-block').length,
+      splitMarkerKatex: document.querySelectorAll('#split-marker-case > .elm-math-rescued-block .katex').length,
+      splitMarkerHidden: document.querySelectorAll('#split-marker-case .elm-math-split-original').length,
       validInline: document.querySelectorAll('#valid-inline .katex').length,
       inlineSpacingBefore: document.querySelector('#inline-spacing > .elm-math-rescued-wrapper')?.firstChild?.textContent,
       inlineSpacingAfter: document.querySelector('#inline-spacing > .elm-math-rescued-wrapper')?.lastChild?.textContent,
@@ -477,6 +487,10 @@ For the depth-one basis, one has
     `a split display formula after native katex was not joined cleanly: ${initial.nativeSplitRaw}`);
   assert(!initial.nativeSplitRaw?.includes('A(Z)'),
     `a native katex annotation leaked into the rescued math: ${initial.nativeSplitRaw}`);
+  assert(initial.splitMarkerBlocks === 1 && initial.splitMarkerKatex > 0,
+    `a display formula split around an empty list marker was not rescued: blocks ${initial.splitMarkerBlocks}, katex ${initial.splitMarkerKatex}`);
+  assert(initial.splitMarkerHidden === 3,
+    `the empty list marker was left visible after rescue: ${initial.splitMarkerHidden} split-original nodes`);
   assert(initial.validInline > 0, 'valid inline math was not rendered');
   assert(initial.inlineSpacingBefore?.endsWith('\u00a0') && initial.inlineSpacingAfter?.startsWith('\u00a0'),
     'inline math lost surrounding prose whitespace');
@@ -797,7 +811,9 @@ For the depth-one basis, one has
     mixedStrongText: document.querySelector('#mixed-valid-and-mispaired > strong')?.textContent,
     unknownOriginal: document.querySelectorAll('#mispaired-native-unknown .katex').length,
     unknownRescuedText: document.querySelectorAll('#mispaired-native-unknown .elm-math-rescued-text').length,
-    setextHeadingVisible: getComputedStyle(document.querySelector('#setext-case > h1')).display !== 'none'
+    setextHeadingVisible: getComputedStyle(document.querySelector('#setext-case > h1')).display !== 'none',
+    splitMarkerUlVisible: getComputedStyle(document.querySelector('#split-marker-case > ul')).display !== 'none',
+    splitMarkerUlClass: document.querySelector('#split-marker-case > ul')?.className
   }));
   assert(restored.blocks === 0 && restored.wrappers === 0 && restored.codeHosts === 0 && restored.boundarySpacers === 0 && restored.localChains === 0 && restored.nativeBraceRepairs === 0,
     'turning Fixer off did not restore the original DOM');
@@ -810,6 +826,8 @@ For the depth-one basis, one has
   assert(restored.codeBlockLatexEnvRestored?.includes('\\\\begin{aligned}') && restored.codeBlockLatexEnvUnescapedLeft === 0,
     'turning Fixer off did not restore the latex environment code block content');
   assert(restored.setextHeadingVisible, 'turning Fixer off left the original heading hidden');
+  assert(restored.splitMarkerUlVisible && !restored.splitMarkerUlClass?.includes('elm-math-split-original'),
+    'turning Fixer off left the empty list marker hidden');
   assert(restored.mispairedNativeOriginal === 1,
     'turning Fixer off did not restore the original mispaired native math');
   assert(restored.mispairedChainOriginal === 2,

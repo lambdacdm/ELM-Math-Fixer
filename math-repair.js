@@ -626,13 +626,14 @@
     return item?.tagName === 'LI' && !(item.textContent || '').trim();
   }
 
-  function hasOnlyAllowedSplitSeparators(previous, next) {
+  function hasOnlyAllowedSplitSeparators(previous, next, markers) {
     let cursor = previous.nextSibling;
     let emptyListCount = 0;
     while (cursor && cursor !== next) {
       if (cursor.nodeType === Node.ELEMENT_NODE) {
         if (!isEmptySplitListMarker(cursor) || emptyListCount > 0) return false;
         emptyListCount++;
+        if (markers && cursor.tagName === 'UL') markers.push(cursor);
       } else if (cursor.nodeType === Node.TEXT_NODE && (cursor.nodeValue || '').trim()) {
         return false;
       }
@@ -1046,6 +1047,7 @@
         }
 
         const group = [el];
+        const separatorMarkers = [];
         let combinedText = text;
         let totalDelimiters = delimiterCount;
         let totalDollars = dollarCount;
@@ -1063,7 +1065,7 @@
             const previousEl = group[group.length - 1];
             if (
               nextNode.parentElement !== el.parentElement ||
-              !hasOnlyAllowedSplitSeparators(previousEl, nextNode)
+              !hasOnlyAllowedSplitSeparators(previousEl, nextNode, separatorMarkers)
             ) {
               break;
             }
@@ -1111,7 +1113,7 @@
           if (
             !['H1', 'H2', 'P', 'LI'].includes(effectiveEl.tagName) ||
             nextEl.parentElement !== el.parentElement ||
-            !hasOnlyAllowedSplitSeparators(previousEl, nextEl)
+            !hasOnlyAllowedSplitSeparators(previousEl, nextEl, separatorMarkers)
           ) {
             break;
           }
@@ -1190,6 +1192,7 @@
           ) {
             markRescuedLayoutHosts(group[0]);
             group.forEach(hideSplitOriginal);
+            separatorMarkers.forEach(hideSplitOriginal);
             i++;
             continue;
           }
@@ -1212,6 +1215,7 @@
             }
 
             group.forEach(hideSplitOriginal);
+            separatorMarkers.forEach(hideSplitOriginal);
             group[0].parentNode.insertBefore(mathBlock, group[0]);
             markRescuedLayoutHosts(mathBlock);
           } catch (error) {

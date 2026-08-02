@@ -1,15 +1,12 @@
-# ELM Math Fixer v1.2.7
+# ELM Math Fixer v1.2.8
 
-This release rescues display formulas that Markdown splits across headings, paragraphs, and list items — including around formulas ELM already rendered — and renders formulas containing unknown LaTeX commands literally instead of leaving them unrendered.
+This release hides empty list markers that Markdown pulls out of the middle of a split display formula, so a rescued formula no longer leaves a stray bullet point behind it.
 
-## What's New since v1.2.6
+## What's New since v1.2.7
 
 ### Fixes
-- **Display formula split across a heading and following content**: ELM can split a `$$...$$` display formula so the opening half lands inside a heading and the closing half in the next paragraph — or in a bare text node inside a list item (`<li>`), with no `<p>` wrapper at all. Split elements are now merged and the combined formula is rendered.
-- **Split formulas around already-rendered KaTeX**: when a heading already contains KaTeX that ELM rendered natively, a remaining split `$$...$$` fragment is still detected and repaired, without duplicating or leaking the already-rendered content.
-- **Unknown LaTeX commands render literally**: formulas containing commands ELM's KaTeX does not know (e.g. `\Ext`, `\fp`, `\ur`) are now displayed with the unknown commands as literal text instead of leaving the whole formula unrendered. This also applies to split display formulas and inline formulas spanning multiple lines.
-- **`\[`/`\]` and `\(`/`\)` split across elements**: these delimiters are now tracked like `$`/`$$` when a formula is split between adjacent elements.
+- **Stray bullet after a rescued formula**: when a `$$...$$` display formula is split around an empty list marker (an empty `<ul>` bullet that Markdown extracted from inside the formula), the marker is now hidden together with the split original elements. Previously the bullet stayed visible after the rendered formula block. Ordered-list numbers (`<ol>`), which carry real list structure, remain visible as before.
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.7.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.2.8.zip`.
