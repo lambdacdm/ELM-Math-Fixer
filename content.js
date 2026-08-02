@@ -505,14 +505,82 @@
     return wrapper;
   }
 
+  // A banner above the top bar pushes the top bar down and adds its own
+  // controls (e.g. a dismiss button). Cluster candidate controls into rows by
+  // vertical position, then treat the row with the most controls as the top
+  // bar: banner rows usually hold one or two controls, the top bar holds more.
   function getVisibleTopBarControls() {
-    return Array.from(
+    const candidates = Array.from(
       document.querySelectorAll('button, a, [role="button"], [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
     ).filter((control) => {
       if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
       const rect = control.getBoundingClientRect();
-      return rect.top >= 0 && rect.top < 100 && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38;
+      return rect.top >= 0 && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38;
     });
+    if (candidates.length === 0) return [];
+
+    const bands = [];
+    candidates.forEach((control) => {
+      const rect = control.getBoundingClientRect();
+      const band = bands.find((item) => Math.abs(item.top - rect.top) <= 30);
+      if (band) band.controls.push(control);
+      else bands.push({ top: rect.top, controls: [control] });
+    });
+
+    let topBarBand = bands[0];
+    for (const band of bands) {
+      if (band.controls.length > topBarBand.controls.length) topBarBand = band;
+    }
+    return topBarBand.controls;
+  }
+
+  // Remember the last known top bar anchor (control + position). While a
+  // full-page overlay (e.g. the model picker menu) is open, the scan may
+  // re-anchor compact controls to overlay items; instead keep them in place so
+  // the overlay hides them naturally, like ELM's own controls. The anchor is
+  // only kept while its control stays in place; when the top bar moves (e.g. a
+  // banner pushes it down mid-layout-transition) the anchor is refreshed so
+  // compact controls re-position correctly instead of getting stuck.
+  let lastCompactAnchorControl = null;
+  let lastCompactAnchorRect = null;
+
+  // Returns the anchor rect to position against, or null to keep the current
+  // compact position untouched.
+  function updateCompactAnchor(leftmost) {
+    if (!leftmost) return null;
+    const rect = leftmost.getBoundingClientRect();
+
+    if (lastCompactAnchorControl && lastCompactAnchorRect && isVisible(lastCompactAnchorControl)) {
+      const currentRect = lastCompactAnchorControl.getBoundingClientRect();
+      const moved =
+        Math.abs(currentRect.top - lastCompactAnchorRect.top) > 2 ||
+        Math.abs(currentRect.left - lastCompactAnchorRect.left) > 2;
+      if (!moved && isAnchorCoveredByOverlay(lastCompactAnchorRect)) return null;
+    }
+
+    lastCompactAnchorControl = leftmost;
+    lastCompactAnchorRect = rect;
+    return rect;
+  }
+
+  function isAnchorCoveredByOverlay(rect) {
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const topElement = document.elementsFromPoint(x, y)[0];
+    if (!topElement) return true;
+    if (topElement.closest(`#${FIXER_TOGGLE_ID}, #${PROMPT_BUTTON_ID}`)) return false;
+
+    let node = topElement;
+    for (let depth = 0; node && depth < 10; depth++) {
+      if (node === document.body || node === document.documentElement) break;
+      const nodeRect = node.getBoundingClientRect();
+      const zIndex = Number.parseInt(getComputedStyle(node).zIndex, 10) || 0;
+      if (zIndex >= 100 && nodeRect.height > 150 && nodeRect.height > rect.height * 1.8) {
+        return true;
+      }
+      node = node.parentElement;
+    }
+    return false;
   }
 
   function findCompactTopBarMount() {
@@ -581,7 +649,9 @@
       return;
     }
 
-    const rect = leftmost.getBoundingClientRect();
+    const anchorRect = updateCompactAnchor(leftmost);
+    if (!anchorRect) return;
+    const rect = anchorRect;
     const buttonSize = 42;
     const existingToggle = document.getElementById(FIXER_TOGGLE_ID);
     const switchWidth = existingToggle?.getBoundingClientRect().width ||
@@ -866,7 +936,9 @@
     const gap = 14;
 
     if (leftmost) {
-      const rect = leftmost.getBoundingClientRect();
+      const anchorRect = updateCompactAnchor(leftmost);
+      if (!anchorRect) return;
+      const rect = anchorRect;
       toggle.style.left = `${Math.max(8, rect.left - size - gap)}px`;
       toggle.style.top = `${Math.max(8, rect.top + (rect.height - size) / 2)}px`;
       toggle.style.right = '';
