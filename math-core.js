@@ -3,9 +3,11 @@
 
   const MULTILINE_MATH_ENVIRONMENTS = new Set([
     'align', 'aligned', 'alignedat', 'alignat', 'array', 'bmatrix', 'Bmatrix',
-    'cases', 'dcases', 'flalign', 'gather', 'gathered', 'matrix', 'multline',
-    'pmatrix', 'rcases', 'split', 'Vmatrix', 'vmatrix'
+    'cases', 'dcases', 'drcases', 'flalign', 'gather', 'gathered', 'matrix',
+    'multline', 'pmatrix', 'rcases', 'smallmatrix', 'split', 'subarray',
+    'Vmatrix', 'vmatrix'
   ]);
+  const MULTILINE_IMPLYING_COMMANDS = new Set(['substack']);
   const KNOWN_LATEX_COMMAND_CACHE = new Map();
   const VALIDATION_CACHE_LIMIT = 500;
   const VALIDATION_CACHE = new Map();
@@ -137,15 +139,51 @@
     return validateWithLiteralUnknownCommands(validationSource).ok ? candidate : source;
   }
 
+  function collectMultilineImpliedIntervals(source) {
+    const intervals = [];
+    for (const name of MULTILINE_IMPLYING_COMMANDS) {
+      const pattern = new RegExp(`\\\\${name}\\{`, 'g');
+      let match;
+      while ((match = pattern.exec(source)) !== null) {
+        let depth = 1;
+        let index = pattern.lastIndex;
+        for (; index < source.length && depth > 0; index++) {
+          if (source[index] !== '\\') {
+            if (source[index] === '{') depth++;
+            else if (source[index] === '}') depth--;
+            continue;
+          }
+          const next = source[index + 1];
+          if (next === '{' || next === '}') index++;
+        }
+        if (depth === 0) intervals.push([match.index, index]);
+      }
+    }
+    intervals.sort((a, b) => a[0] - b[0]);
+    return intervals;
+  }
+
   function hasUnresolvedDoubledBackslash(source) {
     const pattern = /\\+(begin|end)\{([^{}]+)\}/g;
     const stack = [];
     let cursor = 0;
     let match;
-    const unsafe = (segment) =>
-      !stack.some(isMultilineMathEnvironment) && /\\{2,}(?=\S)/.test(segment);
+    const impliedIntervals = collectMultilineImpliedIntervals(source);
+    const unsafe = (segment, offset) => {
+      if (stack.some(isMultilineMathEnvironment)) return false;
+      const runPattern = /\\{2,}(?=\S)/g;
+      let run;
+      while ((run = runPattern.exec(segment)) !== null) {
+        const position = offset + run.index;
+        const insideImplied = impliedIntervals.some(
+          ([start, end]) => position >= start && position < end
+        );
+        if (!insideImplied) return true;
+      }
+      return false;
+    };
     while ((match = pattern.exec(source)) !== null) {
-      if (unsafe(source.slice(cursor, match.index))) return true;
+      if (unsafe(source.slice(cursor, match.index), cursor)) return true;
       const [, command, name] = match;
       if (command === 'begin') stack.push(name);
       else {
@@ -154,7 +192,7 @@
       }
       cursor = pattern.lastIndex;
     }
-    return unsafe(source.slice(cursor));
+    return unsafe(source.slice(cursor), cursor);
   }
 
   function normalizeDoubledDelimiterSegment(segment) {

@@ -104,6 +104,15 @@ $$</p>
         <h1>$$ X(\\mathbb Z_p)<em>{S,\\Pi</em>{\\mathrm{orb}}}</h1>
         <p>X(\\mathbb Z_p)_{S,\\PL^\\sigma}. $$</p>
       </section>
+      <section class="markdown" id="setext-substack-case">
+        <h1>$$
+H_n</h1>
+        <p>\\#
+\\bigcup_{k=1}^4
+\\ \\bigcup_{\\substack{a\\bmod q\\\\a\\text{ odd}}}
+\\operatorname{Orb}<em>{S_3}(u</em>{k,a}).
+$$</p>
+      </section>
       <section class="markdown" id="setext-invalid-case">
         <h1>$$ \\frac{a</h1>
         <p>b$$</p>
@@ -201,6 +210,7 @@ $$
         <p id="code-math"><code>$a_1$</code></p>
         <p id="known-double">$\\\\alpha + 1$</p>
         <p id="unknown-double">$\\\\notARealCommand + 1$</p>
+        <p id="unknown-double-braces">\${\\\\fp}$</p>
         <p id="unknown-command-math">With $U_S^{\\MT}$ and $1-\\zeta$.</p>
       </section>
       <section class="markdown" id="table-cases">
@@ -307,6 +317,9 @@ For the depth-one basis, one has
       setextSubscriptRaw: document.querySelector('#setext-subscript-case > .elm-math-rescued-block')?.dataset.rawText,
       setextSubscriptRendered: document.querySelectorAll('#setext-subscript-case > .elm-math-rescued-block .katex').length,
       setextSubscriptText: document.querySelector('#setext-subscript-case > .elm-math-rescued-block .katex')?.textContent,
+      setextSubstackBlocks: document.querySelectorAll('#setext-substack-case > .elm-math-rescued-block').length,
+      setextSubstackRendered: document.querySelectorAll('#setext-substack-case > .elm-math-rescued-block .katex').length,
+      setextSubstackRaw: document.querySelector('#setext-substack-case > .elm-math-rescued-block')?.dataset.rawText,
       setextInvalidBlocks: document.querySelectorAll('#setext-invalid-case > .elm-math-rescued-block').length,
       escapedLayerReason: document.querySelector('#escaped-layer-case > .elm-math-rescued-block')?.dataset.repairReason,
       escapedLayerTex: annotation('#escaped-layer-case annotation[encoding="application/x-tex"]'),
@@ -420,6 +433,9 @@ For the depth-one basis, one has
       codeBlockDocUnescaped: document.querySelectorAll('#code-block-doc-case code.elm-math-code-unescaped').length,
       knownDoubleTex: annotation('#known-double annotation[encoding="application/x-tex"]'),
       unknownDoubleWrapper: document.querySelectorAll('#unknown-double > .elm-math-rescued-wrapper').length,
+      unknownDoubleBracesKatex: document.querySelectorAll('#unknown-double-braces .katex').length,
+      unknownDoubleBracesWrapper: document.querySelectorAll('#unknown-double-braces > .elm-math-rescued-wrapper').length,
+      unknownDoubleBracesText: document.querySelector('#unknown-double-braces')?.textContent,
       tdEmBackslashRendered: document.querySelectorAll('#td-em-backslash .katex:not(.katex-error)').length,
       tdEmBackslashTex: annotation('#td-em-backslash annotation[encoding="application/x-tex"]'),
       tdEmAmpRendered: document.querySelectorAll('#td-em-amp .katex:not(.katex-error)').length,
@@ -443,6 +459,12 @@ For the depth-one basis, one has
   assert(initial.setextSubscriptRendered > 0, 'Split display math with restored underscores did not render');
   assert(initial.setextSubscriptText?.includes('\\PL'),
     'An undefined command was not preserved visibly in repaired display math');
+  assert(initial.setextSubstackBlocks === 1 && initial.setextSubstackRendered > 0,
+    `a substack row separator inside split display math was not rescued: blocks ${initial.setextSubstackBlocks}, katex ${initial.setextSubstackRendered}`);
+  assert(initial.setextSubstackRaw?.includes('\\substack{a\\bmod q\\\\a\\text{ odd}}'),
+    `the substack row separator was damaged in the repaired formula: ${initial.setextSubstackRaw}`);
+  assert(initial.setextSubstackRaw?.includes('\\operatorname{Orb}_{S_3}(u_{k,a})'),
+    `markdown-swallowed subscripts were not restored inside the substack formula: ${initial.setextSubstackRaw}`);
   assert(initial.setextInvalidBlocks === 0, 'Malformed Setext math bypassed syntax validation');
   assert(initial.escapedLayerReason === 'setext-minus',
     'A fully escaped Setext formula was not repaired');
@@ -600,6 +622,10 @@ For the depth-one basis, one has
   assert(initial.knownDoubleTex.includes('\\alpha'), 'known doubled LaTeX command was not normalized');
   assert(!initial.knownDoubleTex.includes('\\\\alpha'), 'known command still has doubled backslashes');
   assert(initial.unknownDoubleWrapper === 0, 'unknown doubled command was modified');
+  assert(initial.unknownDoubleBracesKatex === 0 && initial.unknownDoubleBracesWrapper === 0,
+    'a doubled unknown command inside braces was rendered instead of left unresolved');
+  assert(initial.unknownDoubleBracesText?.includes('${\\\\fp}$'),
+    `an unresolved doubled command inside braces was altered: ${initial.unknownDoubleBracesText}`);
   assert(initial.tdEmBackslashRendered === 1 && initial.tdEmBackslashTex.includes('\\begin{pmatrix}'),
     'Markdown-damaged pmatrix inside a td cell with backslash was not restored');
   assert(initial.tdEmAmpRendered === 1 && initial.tdEmAmpTex.includes('\\begin{pmatrix}'),

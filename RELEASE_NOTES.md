@@ -1,4 +1,18 @@
+# ELM Math Fixer v1.3.1
+
+## What's New since v1.3
+
+### Fixes
+- **Multiline row separators inside `\substack{}`** (v1.3.1): a `\\` row separator inside a `\substack{...}` is now recognised as a legitimate line break in display math, so formulas such as `\substack{a\bmod q\\a\text{ odd}}` render instead of being rejected as a doubled backslash. The row-separator environments `drcases`, `smallmatrix`, and `subarray` are also recognised as multiline math. Doubled backslashes anywhere else are still rejected, and unknown doubled commands (e.g. `{\\fp}`) remain unrepaired.
+
+## Install
+
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.3.1.zip`.
+
+---
+
 # ELM Math Fixer v1.3
+
 
 This major release is a cumulative update covering all fixes since v1.2: rescuing split math in every form ELM's Markdown parsing can produce, repairing doubled-backslash LaTeX everywhere, and making the compact top bar controls follow the page layout reliably.
 
