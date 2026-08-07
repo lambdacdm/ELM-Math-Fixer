@@ -161,6 +161,9 @@ X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,;1-\\lambda\
       <section class="markdown" id="eaten-inline-unbalanced-case">
         <p>((\\lambda) 未配对</p>
       </section>
+      <section class="markdown" id="eaten-inline-unknown-case">
+        <p>考虑 (Z=\\Zcc_p^{\\mathrm{orb}}) 是一般环。</p>
+      </section>
       <markdown id="real-message-case">
         <p>令 (\\zeta=\\zeta_{2^n})，并把 (X=\\mathbb P^1\\setminus{0,1,\\infty}) 用仿射坐标 (\\lambda) 表示。则</p>
         <h1>[
@@ -487,6 +490,15 @@ For the depth-one basis, one has
       unknownMathWrapper: document.querySelectorAll('#unknown-command-math > .elm-math-rescued-wrapper').length,
       unknownMathKatex: document.querySelectorAll('#unknown-command-math .katex').length,
       unknownMathTex: annotation('#unknown-command-math annotation[encoding="application/x-tex"]'),
+      unknownLocalRaw: document.querySelector('#mispaired-native-unknown > .elm-math-local-chain')?.dataset.rawText,
+      unknownLocalMath: document.querySelectorAll('#mispaired-native-unknown .elm-math-local-rendered .katex').length,
+      unknownFollowingMath: document.querySelectorAll('#mispaired-native-unknown .elm-math-rescued-text .katex').length,
+      eatenInlineUnknownWrapper: document.querySelectorAll('#eaten-inline-unknown-case .elm-math-rescued-wrapper').length,
+      redTexts: [...document.querySelectorAll('span')]
+        .filter((node) => getComputedStyle(node).color === 'rgb(204, 0, 0)')
+        .map((node) => node.textContent)
+        .filter((text) => text && text.startsWith('\\')),
+      validInlineErrors: document.querySelectorAll('#valid-inline .katex-error').length,
       bracketSplitBlocks: document.querySelectorAll('#bracket-split-case > .elm-math-rescued-block').length,
       bracketSplitKatex: document.querySelectorAll('#bracket-split-case .katex').length,
       parenSplitBlocks: document.querySelectorAll('#paren-split-case > .elm-math-rescued-block').length,
@@ -522,9 +534,6 @@ For the depth-one basis, one has
       mixedValidMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-rescued-text .katex').length,
       mixedLocalMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-local-rendered .katex').length,
       mixedStrongPreserved: Boolean(document.querySelector('#mixed-valid-and-mispaired > strong .elm-math-rescued-text')),
-      unknownLocalRaw: document.querySelector('#mispaired-native-unknown > .elm-math-local-chain')?.dataset.rawText,
-      unknownLocalMath: document.querySelectorAll('#mispaired-native-unknown .elm-math-local-rendered .katex').length,
-      unknownFollowingMath: document.querySelectorAll('#mispaired-native-unknown .elm-math-rescued-text .katex').length,
       normalNativeRepairs: document.querySelectorAll('#normal-native > .elm-math-local-chain').length,
       currencyWrapper: document.querySelectorAll('#currency > .elm-math-rescued-wrapper').length,
       currencyText: document.querySelector('#currency')?.textContent,
@@ -586,8 +595,9 @@ For the depth-one basis, one has
   assert(initial.setextSubscriptRaw?.includes('X(\\mathbb Z_p)_{S,\\Pi_{\\mathrm{orb}}}'),
     `Markdown-swallowed underscores were not restored inside split display math: ${initial.setextSubscriptRaw}`);
   assert(initial.setextSubscriptRendered > 0, 'Split display math with restored underscores did not render');
-  assert(initial.setextSubscriptText?.includes('\\PL'),
-    'An undefined command was not preserved visibly in repaired display math');
+  assert(initial.setextSubscriptText?.includes('\\PL') &&
+    initial.redTexts.includes('\\PL'),
+    `an undefined command in repaired display math was not kept red: red text: ${initial.redTexts.join(' | ')}`);
   assert(initial.setextSubstackBlocks === 1 && initial.setextSubstackRendered > 0,
     `a substack row separator inside split display math was not rescued: blocks ${initial.setextSubstackBlocks}, katex ${initial.setextSubstackRendered}`);
   assert(initial.setextSubstackRaw?.includes('\\substack{a\\bmod q\\\\a\\text{ odd}}'),
@@ -639,6 +649,8 @@ For the depth-one basis, one has
     `prose parens were wrongly rewritten as math: ${initial.eatenInlineProseText}`);
   assert(initial.eatenInlineUnbalancedKatex === 0,
     'unbalanced parens must never be treated as eaten inline math');
+  assert(initial.eatenInlineUnknownWrapper === 1 && initial.redTexts.includes('\\Zcc'),
+    `an unknown command in rescued eaten-inline math was not marked red: ${initial.redTexts.join(' | ')}`);
   assert(initial.setextEatenBracketReason === 'setext-equals',
     'eaten-bracket Setext chain marker is missing');
   assert(initial.setextEatenBracketProseBlocks === 0 && initial.setextEatenBracketCitationBlocks === 0,
@@ -689,10 +701,9 @@ For the depth-one basis, one has
     `an inline formula spanning lines inside a single element was not rescued: ${initial.inlineNewlineRendered}`);
   assert(initial.inlineNewlineRaw?.includes('$L_1 + M_2$'),
     `inline formula newlines were not flattened in the single-element path: ${initial.inlineNewlineRaw}`);
-  assert(initial.unknownMathWrapper === 1 && initial.unknownMathKatex === 2,
-    `an inline formula with an unknown command was not rendered literally: wrapper ${initial.unknownMathWrapper}, katex ${initial.unknownMathKatex}`);
-  assert(initial.unknownMathTex?.includes('\\MT'),
-    `the unknown command was not rendered as a visible literal: ${initial.unknownMathTex}`);
+  assert(initial.unknownMathWrapper === 1 && initial.unknownMathKatex === 2 &&
+    initial.redTexts.includes('\\MT'),
+    `an inline formula with an unknown command was not rendered with it marked red: wrapper ${initial.unknownMathWrapper}, katex ${initial.unknownMathKatex}, red ${initial.redTexts.join(' | ')}`);
   assert(initial.bracketSplitBlocks === 1 && initial.bracketSplitKatex > 0,
     `a \\[ formula split across paragraphs was not rescued: blocks ${initial.bracketSplitBlocks}, katex ${initial.bracketSplitKatex}`);
   assert(initial.parenSplitBlocks === 1 && initial.parenSplitKatex > 0,
@@ -709,9 +720,12 @@ For the depth-one basis, one has
     `a native katex annotation leaked into the rescued math: ${initial.nativeSplitRaw}`);
   assert(initial.splitMarkerBlocks === 1 && initial.splitMarkerKatex > 0,
     `a display formula split around an empty list marker was not rescued: blocks ${initial.splitMarkerBlocks}, katex ${initial.splitMarkerKatex}`);
+  assert(initial.redTexts.includes('\\fp'),
+    `the unknown command in the rescued split formula lost its red marker: ${initial.redTexts.join(' | ')}`);
   assert(initial.splitMarkerHidden === 3,
     `the empty list marker was left visible after rescue: ${initial.splitMarkerHidden} split-original nodes`);
   assert(initial.validInline > 0, 'valid inline math was not rendered');
+  assert(initial.validInlineErrors === 0, 'valid inline math was wrongly marked as an error');
   assert(initial.inlineSpacingBefore?.endsWith('\u00a0') && initial.inlineSpacingAfter?.startsWith('\u00a0'),
     'inline math lost surrounding prose whitespace');
   assert(initial.linkSpacingBefore?.endsWith('\u00a0') && initial.linkSpacingAfter === '-th root of unity',
@@ -742,8 +756,9 @@ For the depth-one basis, one has
     'local mismatch repair prevented other valid inline formulas from rendering');
   assert(initial.mixedStrongPreserved,
     'rendering valid math alongside a local repair removed bold markup');
-  assert(initial.unknownLocalRaw === '$K$ is a field and $\\cO_K^\\times$' && initial.unknownLocalMath === 2,
-    'an undefined command prevented a structurally safe local mismatch repair');
+  assert(initial.unknownLocalRaw === '$K$ is a field and $\\cO_K^\\times$' && initial.unknownLocalMath === 2 &&
+    initial.redTexts.includes('\\cO'),
+    `the undefined command in the local mismatch repair was not marked red: ${initial.redTexts.join(' | ')}`);
   assert(initial.unknownFollowingMath === 1,
     'an undefined-command repair prevented following valid inline math from rendering');
   assert(initial.normalNativeRepairs === 0,

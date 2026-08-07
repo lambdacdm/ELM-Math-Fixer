@@ -24,7 +24,6 @@
   const CORE = globalThis.ELMMathFixerCore;
   if (!CORE) throw new Error('ELM Math Fixer core failed to load.');
   const {
-    validateWithLiteralUnknownCommands,
     normalizePairedEscapedSetBraces,
     normalizeEscapedLatexText,
     normalizeCodeBlockLatexLayer,
@@ -32,7 +31,6 @@
     normalizeMathDelimiterWhitespace,
     protectMathBoundaryWhitespace,
     isEscapedAt,
-    getMathSegmentDetails,
     isSafeMixedTextMath
   } = CORE;
   const MAX_SPLIT_MATH_NODES = 12;
@@ -106,7 +104,7 @@
 
       try {
         renderMathInto(rendered);
-        if (!rendered.querySelector('.katex') || rendered.querySelector('.katex-error')) return;
+        if (!hasAcceptableMathResult(rendered)) return;
 
         const host = document.createElement('span');
         host.className = 'elm-math-rescued-code';
@@ -165,8 +163,8 @@
       wrapper.textContent = runText;
 
       try {
-        renderMathInto(wrapper, { allowUndefinedCommands: true });
-        if (!wrapper.querySelector('.katex') || wrapper.querySelector('.katex-error')) return;
+        renderMathInto(wrapper);
+        if (!hasAcceptableMathResult(wrapper)) return;
 
         const host = document.createElement('span');
         host.className = 'elm-math-rescued-text';
@@ -227,8 +225,8 @@
       rendered.textContent = displayMode ? `$$${normalized}$$` : `$${normalized}$`;
 
       try {
-        renderMathInto(rendered, { allowUndefinedCommands: true });
-        if (rendered.querySelectorAll('.katex').length !== 1 || rendered.querySelector('.katex-error')) {
+        renderMathInto(rendered);
+        if (!hasAcceptableSingleMathResult(rendered)) {
           return;
         }
 
@@ -422,10 +420,11 @@
         const rendered = document.createElement('span');
         rendered.className = 'elm-math-local-rendered';
         rendered.textContent = candidate.reconstructed;
-        renderMathInto(rendered, { allowUndefinedCommands: true });
+        renderMathInto(rendered);
         if (
-          rendered.querySelectorAll('.katex').length !== candidate.dollarCount / 2 ||
-          rendered.querySelector('.katex-error')
+          !hasAcceptableMathResult(rendered) ||
+          rendered.querySelectorAll('.katex').length + rendered.querySelectorAll('.katex-error').length !==
+            candidate.dollarCount / 2
         ) {
           throw new Error('local reconstruction did not render every formula');
         }
@@ -944,8 +943,8 @@
     mathBlock.textContent = combinedText;
 
     try {
-      renderMathInto(mathBlock, { allowUndefinedCommands: true });
-      if (!mathBlock.querySelector('.katex') || mathBlock.querySelector('.katex-error')) {
+      renderMathInto(mathBlock);
+      if (!hasAcceptableMathResult(mathBlock)) {
         throw new Error('split display math did not render cleanly');
       }
 
@@ -973,30 +972,28 @@
     return clone;
   }
 
-  const literalMacroCache = new Map();
-  function collectLiteralUnknownCommandMacros(text) {
-    if (literalMacroCache.has(text)) return literalMacroCache.get(text);
-    const segmentPattern = /\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\$)[^$\r\n]+?\$/g;
-    const macros = {};
-    let match;
-
-    while ((match = segmentPattern.exec(text)) !== null) {
-      const segment = normalizeEscapedLatexText(match[0]);
-      const { body, displayMode } = getMathSegmentDetails(segment);
-      const result = validateWithLiteralUnknownCommands(body, { displayMode }, macros);
-      if (!result.ok) return null;
-      Object.assign(macros, result.macros);
-    }
-
-    if (literalMacroCache.size >= 500) {
-      literalMacroCache.delete(literalMacroCache.keys().next().value);
-    }
-    literalMacroCache.set(text, macros);
-    return macros;
+  function isBenignKatexError(node) {
+    const message = String(node.getAttribute('title') || node.textContent || '');
+    return /Undefined control sequence/.test(message);
   }
 
-  function renderMathInto(el, options = {}) {
-    const { allowUndefinedCommands = false } = options;
+  function hasBlockingKatexError(root) {
+    return [...root.querySelectorAll('.katex-error')].some((node) => !isBenignKatexError(node));
+  }
+
+  function hasAcceptableMathResult(root) {
+    if (hasBlockingKatexError(root)) return false;
+    return Boolean(root.querySelector('.katex')) || root.querySelectorAll('.katex-error').length > 0;
+  }
+
+  function hasAcceptableSingleMathResult(root) {
+    if (hasBlockingKatexError(root)) return false;
+    const katexCount = root.querySelectorAll('.katex').length;
+    const errorCount = root.querySelectorAll('.katex-error').length;
+    return katexCount === 1 || (katexCount === 0 && errorCount === 1);
+  }
+
+  function renderMathInto(el) {
     el.normalize();
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     const textNodes = [];
@@ -1010,10 +1007,6 @@
       if (normalizedText !== textNode.textContent) textNode.textContent = normalizedText;
     });
 
-    const macros = allowUndefinedCommands
-      ? collectLiteralUnknownCommandMacros(el.textContent || '')
-      : null;
-
     renderMathInElement(el, {
       delimiters: [
         { left: '$$', right: '$$', display: true },
@@ -1021,7 +1014,6 @@
         { left: '\\(', right: '\\)', display: false },
         { left: '$', right: '$', display: false }
       ],
-      ...(macros ? { macros: { ...macros } } : {}),
       throwOnError: false
     });
   }
@@ -1222,8 +1214,8 @@
     while (freshClone.firstChild) mathWrapper.appendChild(freshClone.firstChild);
 
     try {
-      renderMathInto(mathWrapper, { allowUndefinedCommands: true });
-      if (!mathWrapper.querySelector('.katex') || mathWrapper.querySelector('.katex-error')) {
+      renderMathInto(mathWrapper);
+      if (!hasAcceptableMathResult(mathWrapper)) {
         throw new Error('inline math did not render cleanly');
       }
 
