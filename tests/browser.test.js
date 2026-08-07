@@ -118,6 +118,67 @@ $$</p>
 N_{K/\\mathbb Q}(\\pi_a)</h1><h1>N_{K/\\mathbb Q}(1-4\\zeta_q^a)</h1><p>l.
 $$</p>
       </section>
+      <section class="markdown" id="setext-eaten-bracket-case">
+        <h1>[
+X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,\\;1-\\lambda\\in \\mathcal O_{K,S}^{\\times}}.
+]</p>
+      </section>
+      <section class="markdown" id="setext-eaten-bracket-prose-case">
+        <h1>[Note</h1><p>misc.]</p>
+      </section>
+      <section class="markdown" id="setext-eaten-bracket-citation-case">
+        <h1>[ref](url</h1><p>x)]</p>
+      </section>
+      <markdown id="real-message-case">
+        <p>令 (\\zeta=\\zeta_{2^n})，并把 (X=\\mathbb P^1\\setminus{0,1,\\infty}) 用仿射坐标 (\\lambda) 表示。则</p>
+        <h1>[
+X(\\mathcal O_{K,S})</h1>
+        <p>{\\lambda\\in K\\setminus{0,1}:\\lambda,\\;1-\\lambda\\in \\mathcal O_{K,S}^{\\times}}.
+]</p>
+        <p>Siksek–Visser 的构造给出：若</p>
+        <p>[
+l=2^{2^n}+1
+]</p>
+        <p>是素数，且 (K=\\mathbb Q(\\zeta_{2^n}))，(S) 为 (K) 中位于 (2) 和 (l) 上方的素理想集合，则对每个奇数 (a) 模 (2^n)，即 (a\\in(\\mathbb Z/2^n\\mathbb Z)^\\times)，点</p>
+        <p>[
+\\lambda_a=-4\\zeta_{2^n}^{,a}
+]</p>
+        <p>属于 (X(\\mathcal O_{K,S}))。原因是</p>
+        <p>[
+\\lambda_a=-4\\zeta_{2^n}^{,a}
+]</p>
+        <p>只在 (2) 上有分母/零点，而</p>
+        <p>[
+1-\\lambda_a=1+4\\zeta_{2^n}^{,a}
+]</p>
+        <p>的范数为</p>
+        <p>[
+N_{K/\\mathbb Q}(1+4\\zeta_{2^n}^{,a})=2^{2^n}+1=l,
+]</p>
+        <p>所以它只在 (l) 上方的素理想处有零点。因此 (\\lambda_a) 和 (1-\\lambda_a) 都是 (S)-单位。</p>
+        <p>此外，由于 (X) 的自同构群会置换 (0,1,\\infty)，还可得到每个 (\\lambda_a) 的六个等价点。因此 (X(\\mathcal O_{K,S})) 至少包含</p>
+        <p>[
+\\bigcup_{a\\in(\\mathbb Z/2^n\\mathbb Z)^\\times}
+\\left{
+-4\\zeta^a,;
+1+4\\zeta^a,;
+-\\frac{1}{4\\zeta^a},;
+\\frac{1}{1+4\\zeta^a},;
+\\frac{4\\zeta^a}{1+4\\zeta^a},;
+\\frac{1+4\\zeta^a}{4\\zeta^a}
+\\right},
+]</p>
+        <p>其中 (\\zeta=\\zeta_{2^n})。</p>
+        <p>特别地，对 (n\\ge 2)，这给出至少</p>
+        <p>[
+6\\varphi(2^n)=6\\cdot 2^{n-1}=3\\cdot 2^n
+]</p>
+        <p>个显式的 (P)-整点。</p>
+      </markdown>
+      <section class="markdown" id="setext-eaten-bracket-single-negative-case">
+        <p>[1]</p>
+        <p>[Note]</p>
+      </section>
       <section class="markdown" id="setext-invalid-case">
         <h1>$$ \\frac{a</h1>
         <p>b$$</p>
@@ -329,6 +390,16 @@ For the depth-one basis, one has
       setextDoubleH1Rendered: document.querySelectorAll('#setext-double-h1-case > .elm-math-rescued-block .katex').length,
       setextDoubleH1Raw: document.querySelector('#setext-double-h1-case > .elm-math-rescued-block')?.dataset.rawText,
       setextDoubleH1Reason: document.querySelector('#setext-double-h1-case > .elm-math-rescued-block')?.dataset.repairReason,
+      setextEatenBracketBlocks: document.querySelectorAll('#setext-eaten-bracket-case > .elm-math-rescued-block').length,
+      setextEatenBracketRendered: document.querySelectorAll('#setext-eaten-bracket-case > .elm-math-rescued-block .katex').length,
+      setextEatenBracketRaw: document.querySelector('#setext-eaten-bracket-case > .elm-math-rescued-block')?.dataset.rawText,
+      setextEatenBracketReason: document.querySelector('#setext-eaten-bracket-case > .elm-math-rescued-block')?.dataset.repairReason,
+      setextEatenBracketProseBlocks: document.querySelectorAll('#setext-eaten-bracket-prose-case > .elm-math-rescued-block').length,
+      setextEatenBracketCitationBlocks: document.querySelectorAll('#setext-eaten-bracket-citation-case > .elm-math-rescued-block').length,
+      realMessageBlocks: document.querySelectorAll('#real-message-case > .elm-math-rescued-block').length,
+      realMessageRendered: document.querySelectorAll('#real-message-case > .elm-math-rescued-block .katex').length,
+      realMessageRaws: [...document.querySelectorAll('#real-message-case > .elm-math-rescued-block')].map((b) => b.dataset.rawText || ''),
+      singleBracketNegativeBlocks: document.querySelectorAll('#setext-eaten-bracket-single-negative-case > .elm-math-rescued-block').length,
       setextInvalidBlocks: document.querySelectorAll('#setext-invalid-case > .elm-math-rescued-block').length,
       escapedLayerReason: document.querySelector('#escaped-layer-case > .elm-math-rescued-block')?.dataset.repairReason,
       escapedLayerTex: annotation('#escaped-layer-case annotation[encoding="application/x-tex"]'),
@@ -483,6 +554,30 @@ For the depth-one basis, one has
     `the double-h1 chain was not reconstructed faithfully: ${initial.setextDoubleH1Raw}`);
   assert(initial.setextDoubleH1Reason === 'setext-operators',
     'double-h1 Setext chain marker is missing');
+  assert(initial.setextEatenBracketBlocks === 1 && initial.setextEatenBracketRendered > 0,
+    `a \\[...\\] formula with Markdown-eaten backslashes was not rescued: blocks ${initial.setextEatenBracketBlocks}, katex ${initial.setextEatenBracketRendered}`);
+  assert(initial.setextEatenBracketRaw?.startsWith('\\[') &&
+    initial.setextEatenBracketRaw?.endsWith('\\]') &&
+    initial.setextEatenBracketRaw?.includes('\n=\n') &&
+    initial.setextEatenBracketRaw?.includes('\\mathcal') &&
+    initial.setextEatenBracketRaw?.includes('\\setminus'),
+    `the eaten-bracket chain was not reconstructed faithfully: ${initial.setextEatenBracketRaw}`);
+  assert(initial.setextEatenBracketReason === 'setext-equals',
+    'eaten-bracket Setext chain marker is missing');
+  assert(initial.setextEatenBracketProseBlocks === 0 && initial.setextEatenBracketCitationBlocks === 0,
+    'bare-bracket prose or citation chains were wrongly rescued as math');
+  assert(initial.realMessageBlocks === 8 && initial.realMessageRendered === 8,
+    `the real ELM message was not fully rescued: blocks ${initial.realMessageBlocks}, katex ${initial.realMessageRendered}`);
+  assert(initial.realMessageRaws[0]?.startsWith('\\[') &&
+    initial.realMessageRaws[0]?.includes('\n=\n') &&
+    initial.realMessageRaws[0]?.includes('X(\\mathcal O_{K,S})'),
+    `the real-message Setext chain was not reconstructed first: ${initial.realMessageRaws[0]}`);
+  assert(initial.realMessageRaws.some((r) => r.includes('\\left\\{') && r.includes('\\right\\}')),
+    'eaten \\left\\{ backslashes were not restored in the union formula');
+  assert(initial.realMessageRaws.some((r) => r.includes('\\lambda_a=-4\\zeta_{2^n}^{,a}')),
+    'a single-element eaten-bracket formula was not rescued');
+  assert(initial.singleBracketNegativeBlocks === 0,
+    'single-line prose brackets were wrongly rescued as math');
   assert(initial.setextInvalidBlocks === 0, 'Malformed Setext math bypassed syntax validation');
   assert(initial.escapedLayerReason === 'setext-minus',
     'A fully escaped Setext formula was not repaired');

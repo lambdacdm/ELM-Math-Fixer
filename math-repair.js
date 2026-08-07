@@ -715,6 +715,156 @@
     return { text: repairedText, reason };
   }
 
+  // Markdown treats "\[" and "\]" as punctuation escapes, so a display formula
+  // split by Markdown may lose its backslash delimiters entirely, leaving bare
+  // "[" and "]" that no other repair path recognises. Rebuild \[...\] only for
+  // a structural Setext chain (heading + closing paragraph) whose body
+  // contains a LaTeX command and which validates cleanly.
+  function rescueEatenBracketSetext(el) {
+    if (hasNativeRenderedMath(el)) return false;
+
+    const group = [el];
+    let node = el.nextSibling;
+    while (node && group.length < MAX_SPLIT_MATH_NODES) {
+      if (node.nodeType === Node.TEXT_NODE && !(node.nodeValue || '').trim()) {
+        node = node.nextSibling;
+        continue;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return false;
+      if (isEmptySplitListMarker(node)) {
+        node = node.nextSibling;
+        continue;
+      }
+      if (!['H1', 'H2', 'P'].includes(node.tagName)) return false;
+      if (node.parentElement !== el.parentElement) return false;
+      if (!hasOnlyAllowedSplitSeparators(group[group.length - 1], node)) return false;
+      if (hasNativeRenderedMath(node)) return false;
+      group.push(node);
+      if (getMathAwareText(node, true).trimEnd().endsWith(']')) break;
+      node = node.nextSibling;
+    }
+    if (group.length < 2 || group[group.length - 1].tagName !== 'P') return false;
+
+    const fragments = group.map((item) => getMathAwareText(item, true));
+    const completeText = fragments.join('\n');
+    if (completeText.length > MAX_SPLIT_MATH_LENGTH) return false;
+    const openingText = fragments[0].trimStart();
+    const closingText = fragments[fragments.length - 1].trimEnd();
+    if (!openingText.startsWith('[') || !closingText.endsWith(']')) return false;
+    if ((completeText.match(/[[]/g) || []).length !== 1) return false;
+    if ((completeText.match(/[\]]/g) || []).length !== 1) return false;
+
+    const bodyFragments = fragments.map((fragment, index) => {
+      let body = fragment.trim();
+      if (index === 0) body = body.slice(1).trim();
+      if (index === fragments.length - 1) body = body.slice(0, -1).trim();
+      return restoreEatenBracketBackslashes(body);
+    });
+    if (!bodyFragments.some((body) => /\\[A-Za-z]+/.test(body))) return false;
+    const hasClosingOnlyParagraph =
+      bodyFragments[bodyFragments.length - 1] === '' && closingText === ']';
+    if (bodyFragments.some((body, index) => {
+      if (body) return !isLikelyMathFragment(body);
+      return index !== bodyFragments.length - 1 || !hasClosingOnlyParagraph;
+    })) {
+      return false;
+    }
+
+    let repairedText = '';
+    const effectiveOperators = [];
+    group.forEach((item, index) => {
+      repairedText += bodyFragments[index];
+      const operator = SETEXT_OPERATOR_BY_TAG[item.tagName];
+      const hasLaterMathFragment = bodyFragments.slice(index + 1).some(Boolean);
+      if (operator && hasLaterMathFragment) {
+        repairedText += `\n${operator}\n`;
+        effectiveOperators.push(operator);
+      } else if (index < group.length - 1) {
+        repairedText += '\n';
+      }
+    });
+
+    repairedText = `\\[ ${repairedText} \\]`;
+    if (!isSafeMixedTextMath(repairedText, { allowUndefinedCommands: true })) return false;
+
+    let reason = 'setext-operators';
+    if (effectiveOperators.length === 1 && effectiveOperators[0] === '=') reason = 'setext-equals';
+    if (effectiveOperators.length === 1 && effectiveOperators[0] === '-') reason = 'setext-minus';
+    finalizeSplitMathRescue(group, [], repairedText, { text: repairedText, reason });
+    return true;
+  }
+
+  const EATEN_BRACKET_DELIMITER_COMMANDS = [
+    'left', 'right', 'big', 'Big', 'bigl', 'bigr', 'Bigl', 'Bigr',
+    'biggl', 'biggr', 'Biggl', 'Biggr'
+  ];
+  function restoreEatenBracketBackslashes(text) {
+    const pattern = new RegExp(
+      `\\\\(left|right|big|Big|bigl|bigr|Bigl|Bigr|biggl|biggr|Biggl|Biggr)([{}])`,
+      'g'
+    );
+    return text.replace(pattern, '\\$1\\$2');
+  }
+
+  // A \\\\[...\\\\] formula that stayed inside one element also loses its
+  // delimiters: the element text is a bare multiline "[\\n...\\n]". Rebuild it
+  // only when the body is multiline (prose brackets stay on one line) and
+  // validates as a display formula.
+  function rescueEatenBracketSingle(el, text) {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return false;
+    const rawBody = trimmed.slice(1, -1);
+    if (!rawBody.includes('\n')) return false;
+    const body = rawBody.trim();
+    if (!isLikelyMathFragment(body)) return false;
+    if (body.length > MAX_SPLIT_MATH_LENGTH) return false;
+    const repairedText = `\\[ ${restoreEatenBracketBackslashes(body)} \\]`;
+    if (!isSafeMixedTextMath(repairedText, { allowUndefinedCommands: true })) return false;
+    finalizeSplitMathRescue([el], [], repairedText, { text: repairedText, reason: 'eaten-brackets' });
+    return true;
+  }
+
+  function finalizeSplitMathRescue(group, separatorMarkers, combinedText, setextRepair) {
+    const prevSibling = group[0].previousElementSibling;
+    if (
+      prevSibling &&
+      prevSibling.classList.contains('elm-math-rescued-block') &&
+      prevSibling.dataset.rawText === combinedText
+    ) {
+      markRescuedLayoutHosts(group[0]);
+      group.forEach(hideSplitOriginal);
+      separatorMarkers.forEach(hideSplitOriginal);
+      return true;
+    }
+
+    if (prevSibling && prevSibling.classList.contains('elm-math-rescued-block')) {
+      prevSibling.remove();
+    }
+
+    const mathBlock = document.createElement('div');
+    mathBlock.className = 'elm-math-rescued-block';
+    mathBlock.dataset.rawText = combinedText;
+    if (setextRepair) mathBlock.dataset.repairReason = setextRepair.reason;
+    mathBlock.style.margin = '1em 0';
+    mathBlock.textContent = combinedText;
+
+    try {
+      renderMathInto(mathBlock, { allowUndefinedCommands: true });
+      if (!mathBlock.querySelector('.katex') || mathBlock.querySelector('.katex-error')) {
+        throw new Error('split display math did not render cleanly');
+      }
+
+      group.forEach(hideSplitOriginal);
+      separatorMarkers.forEach(hideSplitOriginal);
+      group[0].parentNode.insertBefore(mathBlock, group[0]);
+      markRescuedLayoutHosts(mathBlock);
+      return true;
+    } catch (error) {
+      warn('failed to render split display math:', error);
+      return false;
+    }
+  }
+
   function cleanMathClone(clone) {
     const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
     const textNodes = [];
@@ -1034,6 +1184,21 @@
           : getMathAwareText(el);
       const { delimiters: delimiterCount, dollars: dollarCount, brackets: bracketCount } = countMathDelimiters(text);
 
+      if (
+        !hiddenOriginal &&
+        (el.tagName === 'H1' || el.tagName === 'H2') &&
+        text.trimStart().startsWith('[') &&
+        rescueEatenBracketSetext(el)
+      ) {
+        i++;
+        continue;
+      }
+
+      if (!hiddenOriginal && rescueEatenBracketSingle(el, text)) {
+        i++;
+        continue;
+      }
+
       if (delimiterCount % 2 === 1 || dollarCount % 2 === 1 || bracketCount % 2 === 1) {
         const splitDelimiter = delimiterCount % 2 === 1;
         if (hiddenOriginal) {
@@ -1182,43 +1347,7 @@
             continue;
           }
 
-          const prevSibling = group[0].previousElementSibling;
-          if (
-            prevSibling &&
-            prevSibling.classList.contains('elm-math-rescued-block') &&
-            prevSibling.dataset.rawText === combinedText
-          ) {
-            markRescuedLayoutHosts(group[0]);
-            group.forEach(hideSplitOriginal);
-            separatorMarkers.forEach(hideSplitOriginal);
-            i++;
-            continue;
-          }
-
-          if (prevSibling && prevSibling.classList.contains('elm-math-rescued-block')) {
-            prevSibling.remove();
-          }
-
-          const mathBlock = document.createElement('div');
-          mathBlock.className = 'elm-math-rescued-block';
-          mathBlock.dataset.rawText = combinedText;
-          if (setextRepair) mathBlock.dataset.repairReason = setextRepair.reason;
-          mathBlock.style.margin = '1em 0';
-          mathBlock.textContent = combinedText;
-
-          try {
-            renderMathInto(mathBlock, { allowUndefinedCommands: true });
-            if (!mathBlock.querySelector('.katex') || mathBlock.querySelector('.katex-error')) {
-              throw new Error('split display math did not render cleanly');
-            }
-
-            group.forEach(hideSplitOriginal);
-            separatorMarkers.forEach(hideSplitOriginal);
-            group[0].parentNode.insertBefore(mathBlock, group[0]);
-            markRescuedLayoutHosts(mathBlock);
-          } catch (error) {
-            warn('failed to render split display math:', error);
-          }
+          finalizeSplitMathRescue(group, separatorMarkers, combinedText, setextRepair);
         }
       } else if (hasMath(text)) {
         const trimmedText = normalizeMathDelimiterWhitespace(text);
