@@ -1204,6 +1204,106 @@
     return Array.from(included).sort((a, b) => a - b).map((i) => allChildren[i]);
   }
 
+  function finalizeInlineMath(el) {
+    const freshClone = cleanMathClone(getMathAwareClone(el));
+    if ((freshClone.textContent || '').includes('\n')) {
+      const textNodes = [];
+      const walker = document.createTreeWalker(freshClone, NodeFilter.SHOW_TEXT);
+      let textNode;
+      while ((textNode = walker.nextNode())) textNodes.push(textNode);
+      textNodes.forEach((node) => {
+        node.textContent = flattenSplitInlineMath(node.textContent || '');
+      });
+    }
+    const freshText = freshClone.textContent || '';
+    const mathWrapper = document.createElement('span');
+    mathWrapper.className = 'elm-math-rescued-wrapper';
+    mathWrapper.dataset.rawText = freshText;
+    while (freshClone.firstChild) mathWrapper.appendChild(freshClone.firstChild);
+
+    try {
+      renderMathInto(mathWrapper, { allowUndefinedCommands: true });
+      if (!mathWrapper.querySelector('.katex') || mathWrapper.querySelector('.katex-error')) {
+        throw new Error('inline math did not render cleanly');
+      }
+
+      const newHiddenOriginal = document.createElement('span');
+      newHiddenOriginal.className = 'elm-math-hidden-original';
+      newHiddenOriginal.style.display = 'none';
+      el.dataset.elmMathOriginalDisplay = el.style.display;
+
+      while (el.firstChild) {
+        newHiddenOriginal.appendChild(el.firstChild);
+      }
+
+      el.appendChild(newHiddenOriginal);
+      el.appendChild(mathWrapper);
+      el.style.display = '';
+      return true;
+    } catch (error) {
+      warn('failed to render inline math:', error);
+      return false;
+    }
+  }
+
+  // Markdown backslash-escapes also eat \\\\( and \\\\) before inline math
+  // delimiters, leaving bare balanced parens around pure-TeX formulas inside
+  // prose. Re-delimit only paren pairs whose bodies look like inline math
+  // (balanced, TeX markers, no CJK) and gate the whole paragraph on KaTeX
+  // validation like every other repair.
+  function rescueEatenInlineMath(el, text) {
+    if (!text.includes('(') || !text.includes(')') || text.includes('\n')) return false;
+    if (text.length > MAX_SPLIT_MATH_LENGTH) return false;
+    if (/\\[()]/.test(text)) return false;
+
+    const openIndexes = [];
+    const spans = [];
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '\\') {
+        i++;
+        continue;
+      }
+      if (text[i] === '(') {
+        openIndexes.push(i);
+      } else if (text[i] === ')') {
+        if (openIndexes.length === 0) return false;
+        const open = openIndexes.pop();
+        if (openIndexes.length === 0) spans.push([open, i]);
+      }
+    }
+    if (openIndexes.length > 0 || spans.length === 0) return false;
+
+    let repaired = '';
+    let cursor = 0;
+    let adopted = 0;
+    for (const [open, close] of spans) {
+      const body = text.slice(open + 1, close);
+      const isInlineBody =
+        body.length >= 1 &&
+        body.length <= 200 &&
+        !/[\u3000-\u303f\uFF00-\uFFEF\u4E00-\u9FFF]/.test(body) &&
+        /\\[^\\]|[\^_][0-9A-Za-z(]/.test(body);
+      if (!isInlineBody) continue;
+      repaired += text.slice(cursor, open) + `\\(${restoreEatenBracketBackslashes(body)}\\)`;
+      cursor = close + 1;
+      adopted++;
+    }
+    if (adopted === 0) return false;
+    repaired += text.slice(cursor);
+
+    if (!isSafeMixedTextMath(repaired, { allowUndefinedCommands: true })) return false;
+
+    const originalText = el.textContent;
+    el.textContent = repaired;
+    if (!finalizeInlineMath(el)) {
+      el.textContent = originalText;
+      return false;
+    }
+    const mathWrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
+    if (mathWrapper) mathWrapper.dataset.repairReason = 'eaten-inline-parens';
+    return true;
+  }
+
   function processContainer(container, affectedRoots = null) {
     if (!container?.isConnected) return;
     getMathTextCache = new WeakMap();
@@ -1290,6 +1390,11 @@
       }
 
       if (!hiddenOriginal && rescueEatenBracketSingle(el, text)) {
+        i++;
+        continue;
+      }
+
+      if (!hiddenOriginal && rescueEatenInlineMath(el, text)) {
         i++;
         continue;
       }
@@ -1463,43 +1568,7 @@
           restoreSingleLineElement(el, hiddenOriginal, wrapper);
         }
 
-        const freshClone = cleanMathClone(getMathAwareClone(el));
-        if ((freshClone.textContent || '').includes('\n')) {
-          const textNodes = [];
-          const walker = document.createTreeWalker(freshClone, NodeFilter.SHOW_TEXT);
-          let textNode;
-          while ((textNode = walker.nextNode())) textNodes.push(textNode);
-          textNodes.forEach((node) => {
-            node.textContent = flattenSplitInlineMath(node.textContent || '');
-          });
-        }
-        const freshText = freshClone.textContent || '';
-        const mathWrapper = document.createElement('span');
-        mathWrapper.className = 'elm-math-rescued-wrapper';
-        mathWrapper.dataset.rawText = freshText;
-        while (freshClone.firstChild) mathWrapper.appendChild(freshClone.firstChild);
-
-        try {
-          renderMathInto(mathWrapper, { allowUndefinedCommands: true });
-          if (!mathWrapper.querySelector('.katex') || mathWrapper.querySelector('.katex-error')) {
-            throw new Error('inline math did not render cleanly');
-          }
-
-          const newHiddenOriginal = document.createElement('span');
-          newHiddenOriginal.className = 'elm-math-hidden-original';
-          newHiddenOriginal.style.display = 'none';
-          el.dataset.elmMathOriginalDisplay = el.style.display;
-
-          while (el.firstChild) {
-            newHiddenOriginal.appendChild(el.firstChild);
-          }
-
-          el.appendChild(newHiddenOriginal);
-          el.appendChild(mathWrapper);
-          el.style.display = '';
-        } catch (error) {
-          warn('failed to render inline math:', error);
-        }
+        finalizeInlineMath(el);
       } else if (hiddenOriginal) {
         restoreSingleLineElement(el, hiddenOriginal, wrapper);
       }

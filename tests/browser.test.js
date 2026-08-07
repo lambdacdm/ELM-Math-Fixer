@@ -149,6 +149,18 @@ X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,;1-\\lambda\
 \\begin{subarray}{c} a \\ b \\end{subarray}
 ]</p>
       </section>
+      <section class="markdown" id="eaten-inline-positive-case">
+        <p>令 (\\zeta=\\zeta_{2^n})，并把 (X=\\mathbb P^1\\setminus{0,1,\\infty}) 用仿射坐标 (\\lambda) 表示。则</p>
+      </section>
+      <section class="markdown" id="eaten-inline-single-case">
+        <p>这给出 (\\lambda) 的唯一性。</p>
+      </section>
+      <section class="markdown" id="eaten-inline-prose-case">
+        <p>（注：(1)——见 (a,b) 与 (n+1)，还有 (0,1] 区间）</p>
+      </section>
+      <section class="markdown" id="eaten-inline-unbalanced-case">
+        <p>((\\lambda) 未配对</p>
+      </section>
       <markdown id="real-message-case">
         <p>令 (\\zeta=\\zeta_{2^n})，并把 (X=\\mathbb P^1\\setminus{0,1,\\infty}) 用仿射坐标 (\\lambda) 表示。则</p>
         <h1>[
@@ -424,10 +436,19 @@ For the depth-one basis, one has
       setextEatenBracketUbraceBlocks: document.querySelectorAll('#setext-eaten-bracket-underbrace-case > .elm-math-rescued-block').length,
       setextEatenBracketUbraceRaw: document.querySelector('#setext-eaten-bracket-underbrace-case > .elm-math-rescued-block')?.dataset.rawText,
       setextEatenBracketDefBlocks: document.querySelectorAll('#setext-eaten-bracket-def-case > .elm-math-rescued-block').length,
+      eatenInlinePositiveKatex: document.querySelectorAll('#eaten-inline-positive-case .katex').length,
+      eatenInlinePositiveReason: document.querySelector('#eaten-inline-positive-case .elm-math-rescued-wrapper')?.dataset.repairReason,
+      eatenInlineAnnotations: [...document.querySelectorAll('#eaten-inline-positive-case annotation[encoding="application/x-tex"]')].map((a) => a.textContent),
+      eatenInlineSingleKatex: document.querySelectorAll('#eaten-inline-single-case .katex').length,
+      eatenInlineProseKatex: document.querySelectorAll('#eaten-inline-prose-case .katex').length,
+      eatenInlineProseText: document.querySelector('#eaten-inline-prose-case p')?.textContent,
+      eatenInlineUnbalancedKatex: document.querySelectorAll('#eaten-inline-unbalanced-case .katex').length,
       realMessageBlocks: document.querySelectorAll('#real-message-case > .elm-math-rescued-block').length,
       realMessageRendered: document.querySelectorAll('#real-message-case > .elm-math-rescued-block .katex').length,
       realMessageRaws: [...document.querySelectorAll('#real-message-case > .elm-math-rescued-block')].map((b) => b.dataset.rawText || ''),
       singleBracketNegativeBlocks: document.querySelectorAll('#setext-eaten-bracket-single-negative-case > .elm-math-rescued-block').length,
+      realMessageIntroKatex: document.querySelectorAll('#real-message-case > p:first-of-type .katex').length,
+      realMessageIntroAnnotations: [...document.querySelectorAll('#real-message-case > p:first-of-type annotation[encoding="application/x-tex"]')].map((a) => a.textContent),
       setextInvalidBlocks: document.querySelectorAll('#setext-invalid-case > .elm-math-rescued-block').length,
       escapedLayerReason: document.querySelector('#escaped-layer-case > .elm-math-rescued-block')?.dataset.repairReason,
       escapedLayerTex: annotation('#escaped-layer-case annotation[encoding="application/x-tex"]'),
@@ -604,6 +625,20 @@ For the depth-one basis, one has
     `underbrace argument braces were wrongly escaped: ${initial.setextEatenBracketUbraceRaw}`);
   assert(initial.setextEatenBracketDefBlocks === 0,
     'eaten-bracket math that KaTeX cannot resolve must be refused, not repaired');
+  assert(initial.eatenInlinePositiveKatex === 3 &&
+    initial.eatenInlinePositiveReason === 'eaten-inline-parens' &&
+    initial.eatenInlineAnnotations.some((a) => a === '\\zeta=\\zeta_{2^n}') &&
+    initial.eatenInlineAnnotations.some((a) => a.includes('X=\\mathbb P^1\\setminus\\{0,1,\\infty\\}')) &&
+    initial.eatenInlineAnnotations.some((a) => a === '\\lambda'),
+    `eaten inline parens were not restored faithfully: ${initial.eatenInlineAnnotations.join(' | ')}`);
+  assert(initial.eatenInlineSingleKatex === 1,
+    'a single parenthesised inline formula inside prose was not rescued');
+  assert(initial.eatenInlineProseKatex === 0 &&
+    initial.eatenInlineProseText?.includes('（注：(1)——见 (a,b)') &&
+    initial.eatenInlineProseText?.includes('(0,1] 区间）'),
+    `prose parens were wrongly rewritten as math: ${initial.eatenInlineProseText}`);
+  assert(initial.eatenInlineUnbalancedKatex === 0,
+    'unbalanced parens must never be treated as eaten inline math');
   assert(initial.setextEatenBracketReason === 'setext-equals',
     'eaten-bracket Setext chain marker is missing');
   assert(initial.setextEatenBracketProseBlocks === 0 && initial.setextEatenBracketCitationBlocks === 0,
@@ -623,6 +658,9 @@ For the depth-one basis, one has
     'eaten \\; spaces or \\frac argument braces were not restored in the union formula');
   assert(initial.realMessageRaws.some((r) => r.includes('\\lambda_a=-4\\zeta_{2^n}^{,a}')),
     'a single-element eaten-bracket formula was not rescued');
+  assert(initial.realMessageIntroKatex === 3 &&
+    initial.realMessageIntroAnnotations.some((a) => a.includes('\\setminus\\{0,1,\\infty\\}')),
+    'the real-message intro paragraph was not shown as inline math');
   assert(initial.singleBracketNegativeBlocks === 0,
     'single-line prose brackets were wrongly rescued as math');
   assert(initial.setextInvalidBlocks === 0, 'Malformed Setext math bypassed syntax validation');
