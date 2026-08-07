@@ -120,7 +120,7 @@ $$</p>
       </section>
       <section class="markdown" id="setext-eaten-bracket-case">
         <h1>[
-X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,\\;1-\\lambda\\in \\mathcal O_{K,S}^{\\times}}.
+X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,;1-\\lambda\\in \\mathcal O_{K,S}^{\\times}}.
 ]</p>
       </section>
       <section class="markdown" id="setext-eaten-bracket-prose-case">
@@ -133,7 +133,7 @@ X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,\\;1-\\lambd
         <p>令 (\\zeta=\\zeta_{2^n})，并把 (X=\\mathbb P^1\\setminus{0,1,\\infty}) 用仿射坐标 (\\lambda) 表示。则</p>
         <h1>[
 X(\\mathcal O_{K,S})</h1>
-        <p>{\\lambda\\in K\\setminus{0,1}:\\lambda,\\;1-\\lambda\\in \\mathcal O_{K,S}^{\\times}}.
+        <p>{\\lambda\\in K\\setminus{0,1}:\\lambda,;1-\\lambda\\in \\mathcal O_{K,S}^{\\times}}.
 ]</p>
         <p>Siksek–Visser 的构造给出：若</p>
         <p>[
@@ -560,7 +560,9 @@ For the depth-one basis, one has
     initial.setextEatenBracketRaw?.endsWith('\\]') &&
     initial.setextEatenBracketRaw?.includes('\n=\n') &&
     initial.setextEatenBracketRaw?.includes('\\mathcal') &&
-    initial.setextEatenBracketRaw?.includes('\\setminus'),
+    initial.setextEatenBracketRaw?.includes('\\setminus') &&
+    initial.setextEatenBracketRaw?.includes('\\{') &&
+    initial.setextEatenBracketRaw?.includes('\\;'),
     `the eaten-bracket chain was not reconstructed faithfully: ${initial.setextEatenBracketRaw}`);
   assert(initial.setextEatenBracketReason === 'setext-equals',
     'eaten-bracket Setext chain marker is missing');
@@ -570,10 +572,15 @@ For the depth-one basis, one has
     `the real ELM message was not fully rescued: blocks ${initial.realMessageBlocks}, katex ${initial.realMessageRendered}`);
   assert(initial.realMessageRaws[0]?.startsWith('\\[') &&
     initial.realMessageRaws[0]?.includes('\n=\n') &&
-    initial.realMessageRaws[0]?.includes('X(\\mathcal O_{K,S})'),
+    initial.realMessageRaws[0]?.includes('X(\\mathcal O_{K,S})') &&
+    initial.realMessageRaws[0]?.includes('\\{\\lambda') &&
+    initial.realMessageRaws[0]?.includes('\\setminus\\{0,1\\}') &&
+    initial.realMessageRaws[0]?.includes('\\lambda,\\;1-\\lambda'),
     `the real-message Setext chain was not reconstructed first: ${initial.realMessageRaws[0]}`);
   assert(initial.realMessageRaws.some((r) => r.includes('\\left\\{') && r.includes('\\right\\}')),
     'eaten \\left\\{ backslashes were not restored in the union formula');
+  assert(initial.realMessageRaws.some((r) => r.includes('-4\\zeta^a,\\;') && r.includes('\\frac{1}{4\\zeta^a}')),
+    'eaten \\; spaces or \\frac argument braces were not restored in the union formula');
   assert(initial.realMessageRaws.some((r) => r.includes('\\lambda_a=-4\\zeta_{2^n}^{,a}')),
     'a single-element eaten-bracket formula was not rescued');
   assert(initial.singleBracketNegativeBlocks === 0,

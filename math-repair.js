@@ -798,12 +798,79 @@
     'left', 'right', 'big', 'Big', 'bigl', 'bigr', 'Bigl', 'Bigr',
     'biggl', 'biggr', 'Biggl', 'Biggr'
   ];
+  const EATEN_BRACKET_ARGUMENT_COMMANDS = {
+    frac: 2,
+    sqrt: 1,
+    binom: 2,
+    mathbb: 1,
+    mathrm: 1,
+    mathbf: 1,
+    mathcal: 1,
+    mathfrak: 1,
+    mathscr: 1,
+    mathsf: 1,
+    mathtt: 1,
+    mathit: 1,
+    boldsymbol: 1,
+    text: 1,
+    textrm: 1,
+    textsf: 1,
+    texttt: 1,
+    mbox: 1,
+    makebox: 1,
+    overset: 2,
+    underset: 2,
+    substack: 1,
+    pmod: 1,
+    operatorname: 1,
+    color: 1,
+    textcolor: 1
+  };
+  function restoreEatenLiteralBraces(text) {
+    let result = '';
+    let pendingArgs = 0;
+    const braceStack = [];
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '\\') {
+        let j = i + 1;
+        while (j < text.length && /[A-Za-z]/.test(text[j])) j++;
+        if (j === i + 1) {
+          result += text.slice(i, i + 2);
+          i++;
+          continue;
+        }
+        const arity = EATEN_BRACKET_ARGUMENT_COMMANDS[text.slice(i + 1, j)];
+        if (arity) pendingArgs += arity;
+        result += text.slice(i, j);
+        i = j - 1;
+        continue;
+      }
+      if (ch === '{') {
+        const isArgument = pendingArgs > 0 || text[i - 1] === '^' || text[i - 1] === '_';
+        if (pendingArgs > 0) pendingArgs--;
+        braceStack.push(isArgument ? 'arg' : 'lit');
+        result += isArgument ? '{' : '\\{';
+        continue;
+      }
+      if (ch === '}') {
+        const matching = braceStack.length > 0 ? braceStack.pop() : 'lit';
+        result += matching === 'arg' ? '}' : '\\}';
+        continue;
+      }
+      if (pendingArgs > 0 && braceStack.length === 0 && !/\s/.test(ch)) pendingArgs = 0;
+      result += ch;
+    }
+    return result;
+  }
   function restoreEatenBracketBackslashes(text) {
     const pattern = new RegExp(
       `\\\\(left|right|big|Big|bigl|bigr|Bigl|Bigr|biggl|biggr|Biggl|Biggr)([{}])`,
       'g'
     );
-    return text.replace(pattern, '\\$1\\$2');
+    return restoreEatenLiteralBraces(
+      text.replace(pattern, '\\$1\\$2').replace(/,\s?;/g, ',\\;')
+    );
   }
 
   // A \\\\[...\\\\] formula that stayed inside one element also loses its
