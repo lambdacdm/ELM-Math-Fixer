@@ -800,8 +800,13 @@
   ];
   const EATEN_BRACKET_ARGUMENT_COMMANDS = {
     frac: 2,
-    sqrt: 1,
+    dfrac: 2,
+    tfrac: 2,
+    cfrac: 2,
     binom: 2,
+    dbinom: 2,
+    tbinom: 2,
+    sqrt: 1,
     mathbb: 1,
     mathrm: 1,
     mathbf: 1,
@@ -820,11 +825,27 @@
     makebox: 1,
     overset: 2,
     underset: 2,
+    stackrel: 2,
     substack: 1,
     pmod: 1,
     operatorname: 1,
     color: 1,
-    textcolor: 1
+    textcolor: 1,
+    begin: 1,
+    end: 1,
+    underbrace: 1,
+    overbrace: 1,
+    phantom: 1,
+    hphantom: 1,
+    vphantom: 1,
+    hspace: 1,
+    vspace: 1,
+    mspace: 1,
+    raisebox: 1,
+    newcommand: 2,
+    renewcommand: 2,
+    DeclareMathOperator: 2,
+    genfrac: 6
   };
   function restoreEatenLiteralBraces(text) {
     let result = '';
@@ -858,7 +879,14 @@
         result += matching === 'arg' ? '}' : '\\}';
         continue;
       }
-      if (pendingArgs > 0 && braceStack.length === 0 && !/\s/.test(ch)) pendingArgs = 0;
+      if (ch === '[' && pendingArgs > 0 && braceStack.length === 0) {
+        let j = i;
+        while (j < text.length && text[j] !== ']') j++;
+        result += text.slice(i, Math.min(j + 1, text.length));
+        i = j;
+        continue;
+      }
+      if (pendingArgs > 0 && braceStack.length === 0 && !/\s/.test(ch)) pendingArgs--;
       result += ch;
     }
     return result;

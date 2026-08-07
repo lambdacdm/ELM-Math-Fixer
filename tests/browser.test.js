@@ -129,6 +129,26 @@ X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,;1-\\lambda\
       <section class="markdown" id="setext-eaten-bracket-citation-case">
         <h1>[ref](url</h1><p>x)]</p>
       </section>
+      <section class="markdown" id="setext-eaten-bracket-env-case">
+        <h1>[
+\\begin{matrix}</h1><p>1&amp;2 \\\\ 3&amp;4 \\end{matrix}
+]</p>
+      </section>
+      <section class="markdown" id="setext-eaten-bracket-sqrt-case">
+        <p>[
+\\sqrt[2^k]{x+y}
+]</p>
+      </section>
+      <section class="markdown" id="setext-eaten-bracket-underbrace-case">
+        <p>[
+\\underbrace{a+b+c}_{3}
+]</p>
+      </section>
+      <section class="markdown" id="setext-eaten-bracket-def-case">
+        <p>[
+\\begin{subarray}{c} a \\ b \\end{subarray}
+]</p>
+      </section>
       <markdown id="real-message-case">
         <p>令 (\\zeta=\\zeta_{2^n})，并把 (X=\\mathbb P^1\\setminus{0,1,\\infty}) 用仿射坐标 (\\lambda) 表示。则</p>
         <h1>[
@@ -396,6 +416,14 @@ For the depth-one basis, one has
       setextEatenBracketReason: document.querySelector('#setext-eaten-bracket-case > .elm-math-rescued-block')?.dataset.repairReason,
       setextEatenBracketProseBlocks: document.querySelectorAll('#setext-eaten-bracket-prose-case > .elm-math-rescued-block').length,
       setextEatenBracketCitationBlocks: document.querySelectorAll('#setext-eaten-bracket-citation-case > .elm-math-rescued-block').length,
+      setextEatenBracketEnvBlocks: document.querySelectorAll('#setext-eaten-bracket-env-case > .elm-math-rescued-block').length,
+      setextEatenBracketEnvRendered: document.querySelectorAll('#setext-eaten-bracket-env-case > .elm-math-rescued-block .katex').length,
+      setextEatenBracketEnvRaw: document.querySelector('#setext-eaten-bracket-env-case > .elm-math-rescued-block')?.dataset.rawText,
+      setextEatenBracketSqrtBlocks: document.querySelectorAll('#setext-eaten-bracket-sqrt-case > .elm-math-rescued-block').length,
+      setextEatenBracketSqrtRaw: document.querySelector('#setext-eaten-bracket-sqrt-case > .elm-math-rescued-block')?.dataset.rawText,
+      setextEatenBracketUbraceBlocks: document.querySelectorAll('#setext-eaten-bracket-underbrace-case > .elm-math-rescued-block').length,
+      setextEatenBracketUbraceRaw: document.querySelector('#setext-eaten-bracket-underbrace-case > .elm-math-rescued-block')?.dataset.rawText,
+      setextEatenBracketDefBlocks: document.querySelectorAll('#setext-eaten-bracket-def-case > .elm-math-rescued-block').length,
       realMessageBlocks: document.querySelectorAll('#real-message-case > .elm-math-rescued-block').length,
       realMessageRendered: document.querySelectorAll('#real-message-case > .elm-math-rescued-block .katex').length,
       realMessageRaws: [...document.querySelectorAll('#real-message-case > .elm-math-rescued-block')].map((b) => b.dataset.rawText || ''),
@@ -564,6 +592,18 @@ For the depth-one basis, one has
     initial.setextEatenBracketRaw?.includes('\\{') &&
     initial.setextEatenBracketRaw?.includes('\\;'),
     `the eaten-bracket chain was not reconstructed faithfully: ${initial.setextEatenBracketRaw}`);
+  assert(initial.setextEatenBracketEnvBlocks === 1 && initial.setextEatenBracketEnvRendered === 1 &&
+    initial.setextEatenBracketEnvRaw?.includes('\\begin{matrix}') &&
+    initial.setextEatenBracketEnvRaw?.includes('\\end{matrix}'),
+    `environment braces were wrongly escaped: ${initial.setextEatenBracketEnvRaw}`);
+  assert(initial.setextEatenBracketSqrtBlocks === 1 &&
+    initial.setextEatenBracketSqrtRaw?.includes('\\sqrt[2^k]{x+y}'),
+    `optional-argument braces were wrongly escaped: ${initial.setextEatenBracketSqrtRaw}`);
+  assert(initial.setextEatenBracketUbraceBlocks === 1 &&
+    initial.setextEatenBracketUbraceRaw?.includes('\\underbrace{a+b+c}_{3}'),
+    `underbrace argument braces were wrongly escaped: ${initial.setextEatenBracketUbraceRaw}`);
+  assert(initial.setextEatenBracketDefBlocks === 0,
+    'eaten-bracket math that KaTeX cannot resolve must be refused, not repaired');
   assert(initial.setextEatenBracketReason === 'setext-equals',
     'eaten-bracket Setext chain marker is missing');
   assert(initial.setextEatenBracketProseBlocks === 0 && initial.setextEatenBracketCitationBlocks === 0,
