@@ -1,4 +1,18 @@
+# ELM Math Fixer v1.3.2
+
+## What's New since v1.3.1
+
+### Fixes
+- **Display math split across consecutive headings** (v1.3.2): when a `$$...$$` formula is split by Markdown into two consecutive headings plus a closing paragraph — with equals signs swallowed as Setext markers — the chain is now reconstructed and rendered, including formulas that end in a plain fragment such as `l.`. Fragment acceptance is principled rather than an ever-growing signature list: a fragment with no LaTeX signatures is treated as math unless it looks like a prose word (three or more consecutive letters), so `l.`, `ab`, and `x:` are accepted while sentences like `where` still block the repair.
+
+## Install
+
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.3.2.zip`.
+
+---
+
 # ELM Math Fixer v1.3.1
+
 
 ## What's New since v1.3
 

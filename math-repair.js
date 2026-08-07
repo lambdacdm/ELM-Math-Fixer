@@ -613,10 +613,8 @@
     const trimmed = text.trim();
     if (!trimmed) return false;
 
-    return (
-      /^[A-Za-z]$/.test(trimmed) ||
-      /\\[A-Za-z]+|[_^{}]|\d|[+\-*/<>]|[()[\],]/.test(trimmed)
-    );
+    if (/\\[A-Za-z]+|[_^{}]|\d|[+\-*/<>]|[()[\],]/.test(trimmed)) return true;
+    return !/[A-Za-z]{3,}/.test(trimmed);
   }
 
   function isEmptySplitListMarker(node) {

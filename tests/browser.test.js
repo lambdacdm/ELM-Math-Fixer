@@ -113,6 +113,11 @@ H_n</h1>
 \\operatorname{Orb}<em>{S_3}(u</em>{k,a}).
 $$</p>
       </section>
+      <section class="markdown" id="setext-double-h1-case">
+        <h1>$$
+N_{K/\\mathbb Q}(\\pi_a)</h1><h1>N_{K/\\mathbb Q}(1-4\\zeta_q^a)</h1><p>l.
+$$</p>
+      </section>
       <section class="markdown" id="setext-invalid-case">
         <h1>$$ \\frac{a</h1>
         <p>b$$</p>
@@ -320,6 +325,10 @@ For the depth-one basis, one has
       setextSubstackBlocks: document.querySelectorAll('#setext-substack-case > .elm-math-rescued-block').length,
       setextSubstackRendered: document.querySelectorAll('#setext-substack-case > .elm-math-rescued-block .katex').length,
       setextSubstackRaw: document.querySelector('#setext-substack-case > .elm-math-rescued-block')?.dataset.rawText,
+      setextDoubleH1Blocks: document.querySelectorAll('#setext-double-h1-case > .elm-math-rescued-block').length,
+      setextDoubleH1Rendered: document.querySelectorAll('#setext-double-h1-case > .elm-math-rescued-block .katex').length,
+      setextDoubleH1Raw: document.querySelector('#setext-double-h1-case > .elm-math-rescued-block')?.dataset.rawText,
+      setextDoubleH1Reason: document.querySelector('#setext-double-h1-case > .elm-math-rescued-block')?.dataset.repairReason,
       setextInvalidBlocks: document.querySelectorAll('#setext-invalid-case > .elm-math-rescued-block').length,
       escapedLayerReason: document.querySelector('#escaped-layer-case > .elm-math-rescued-block')?.dataset.repairReason,
       escapedLayerTex: annotation('#escaped-layer-case annotation[encoding="application/x-tex"]'),
@@ -465,6 +474,15 @@ For the depth-one basis, one has
     `the substack row separator was damaged in the repaired formula: ${initial.setextSubstackRaw}`);
   assert(initial.setextSubstackRaw?.includes('\\operatorname{Orb}_{S_3}(u_{k,a})'),
     `markdown-swallowed subscripts were not restored inside the substack formula: ${initial.setextSubstackRaw}`);
+  assert(initial.setextDoubleH1Blocks === 1 && initial.setextDoubleH1Rendered > 0,
+    `a double-h1 Setext chain was not rescued: blocks ${initial.setextDoubleH1Blocks}, katex ${initial.setextDoubleH1Rendered}`);
+  assert(initial.setextDoubleH1Raw?.includes('N_{K/\\mathbb Q}(\\pi_a)') &&
+    initial.setextDoubleH1Raw?.includes('N_{K/\\mathbb Q}(1-4\\zeta_q^a)') &&
+    initial.setextDoubleH1Raw?.includes('\n=\n') &&
+    initial.setextDoubleH1Raw?.includes('l.'),
+    `the double-h1 chain was not reconstructed faithfully: ${initial.setextDoubleH1Raw}`);
+  assert(initial.setextDoubleH1Reason === 'setext-operators',
+    'double-h1 Setext chain marker is missing');
   assert(initial.setextInvalidBlocks === 0, 'Malformed Setext math bypassed syntax validation');
   assert(initial.escapedLayerReason === 'setext-minus',
     'A fully escaped Setext formula was not repaired');
