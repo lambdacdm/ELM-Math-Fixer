@@ -10,13 +10,17 @@
           label: 'Copy (English)',
           text: `When generating mathematical formulas ($...$ or $$...$$), you must follow these rules, or the formula will fail to render or won't be recognized at all:
 
-[MOST IMPORTANT] Never include a line break or blank line inside a $$...$$ formula. Everything from the opening $$ to the closing $$ must be one continuous, unbroken block of text - no line breaks in between, even for long formulas; keep it all on the same line/paragraph. Otherwise the platform will split the formula partway through and it won't render at all. If you need multi-line display, use an aligned/array/gathered environment with \\ line breaks inside the LaTeX itself - never insert a literal line break at the text level.`
+[MOST IMPORTANT] Never include a line break or blank line inside a $$...$$ formula. Everything from the opening $$ to the closing $$ must be one continuous, unbroken block of text - no line breaks in between, even for long formulas; keep it all on the same line/paragraph. Otherwise the platform will split the formula partway through and it won't render at all. If you need multi-line display, use an aligned/array/gathered environment with \\ line breaks inside the LaTeX itself - never insert a literal line break at the text level.
+
+Also use only LaTeX commands the platform's renderer knows. Build notation from standard pieces (\\operatorname{...}, \\mathrm{...}, \\mathbb{...}, \\mathcal{...}, \\text{...}); never invent commands like \\Ext, \\fp, \\cO, \\PL.`
         },
         {
           label: 'Copy (中文)',
           text: `生成数学公式（$...$ 或 $$...$$）时，必须遵守以下规则，否则公式会渲染失败或完全不被识别：
 
-【最重要】一条 $$...$$ 公式内部绝对不能换行或有空行。从开头 $$ 到结尾 $$ 之间必须是连续的一整段文本，中间不能敲回车--哪怕公式很长也要写在同一行/同一段落里，否则平台会把公式从中间切断，导致完全不渲染。需要分行展示时，用 aligned/array/gathered 环境配合 \\ 处理，不要在文本层面换行。`
+【最重要】一条 $$...$$ 公式内部绝对不能换行或有空行。从开头 $$ 到结尾 $$ 之间必须是连续的一整段文本，中间不能敲回车--哪怕公式很长也要写在同一行/同一段落里，否则平台会把公式从中间切断，导致完全不渲染。需要分行展示时，用 aligned/array/gathered 环境配合 \\ 处理，不要在文本层面换行。
+
+另外，只用平台能识别的 LaTeX 命令，用标准部件拼出记号（\\operatorname{...}、\\mathrm{...}、\\mathbb{...}、\\mathcal{...}、\\text{...}），不要发明命令（如 \\Ext、\\fp、\\cO、\\PL）；否则命令会以红色报错显示。`
         }
       ]
     },
