@@ -140,23 +140,10 @@
       '.elm-math-native-brace-repair',
       '.elm-math-code-unescaped'
     ].join(', ');
-    const runs = [];
-    let current = null;
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    let node;
 
-    while ((node = walker.nextNode())) {
-      if (node.parentElement?.closest(ignoredSelector)) {
-        current = null;
-        continue;
-      }
-      if (!current || node.previousSibling !== current.nodes[current.nodes.length - 1]) {
-        current = { nodes: [], text: '' };
-        runs.push(current);
-      }
-      current.nodes.push(node);
-      current.text += node.textContent || '';
-    }
+    normalizeCrossingEmphasis(el, ignoredSelector);
+
+    const runs = getTextRuns(el, ignoredSelector);
 
     runs.forEach((run) => {
       const runText = run.text.includes('\n') ? flattenSplitInlineMath(run.text) : run.text;
@@ -176,6 +163,183 @@
         for (let i = 1; i < run.nodes.length; i++) run.nodes[i].remove();
       } catch (error) {
         warn('failed to render mixed text math:', error);
+      }
+    });
+
+    rescueEmphasisSplitMathRuns(el, runs);
+  }
+
+  function getTextRuns(host, ignoredSelector) {
+    const runs = [];
+    let current = null;
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    let node;
+
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest(ignoredSelector)) {
+        current = null;
+        continue;
+      }
+      if (!current || node.previousSibling !== current.nodes[current.nodes.length - 1]) {
+        current = { nodes: [], text: '' };
+        runs.push(current);
+      }
+      current.nodes.push(node);
+      current.text += node.textContent || '';
+    }
+    return runs;
+  }
+
+  function getNodeTextOffset(host, node) {
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    range.setEndBefore(node);
+    return range.toString().length;
+  }
+
+  // A Markdown emphasis element can span two broken inline formulas at once:
+  // the `_..._` pair wraps `[part of $A$][prose][part of $B$]`, so one `<em>`
+  // element contains the closing `$` of one formula and the opening `$` of the
+  // next. Normalize such elements back into flat text with `_` markers at the
+  // formula boundaries, but only after the reconstructed runs validate.
+  // Genuine prose emphasis never crosses an odd number of unpaired `$` tokens,
+  // so the parity gate plus the dry-run validation keep it untouched.
+  function normalizeCrossingEmphasis(el, ignoredSelector) {
+    const emphasisSelector = 'em, i';
+    const topEms = Array.from(el.querySelectorAll(emphasisSelector)).filter(
+      (node) => !node.parentElement?.closest(emphasisSelector)
+    );
+    if (topEms.length === 0) return;
+
+    const fullText = el.textContent || '';
+    const openAt = (endOffset) => countMathDelimiters(fullText.slice(0, endOffset)).dollars % 2 === 1;
+    const crossingIndices = [];
+    topEms.forEach((em, index) => {
+      const emText = em.textContent || '';
+      if (!emText.includes('$')) return;
+      const start = getNodeTextOffset(el, em);
+      if (openAt(start) && openAt(start + emText.length)) crossingIndices.push(index);
+    });
+    if (crossingIndices.length === 0) return;
+
+    const clone = el.cloneNode(true);
+    const cloneTopEms = Array.from(clone.querySelectorAll(emphasisSelector)).filter(
+      (node) => !node.parentElement?.closest(emphasisSelector)
+    );
+    if (cloneTopEms.length !== topEms.length) return;
+
+    crossingIndices.forEach((index) => unwrapCrossingEmphasis(cloneTopEms[index]));
+    const runs = getTextRuns(clone, ignoredSelector);
+    for (const run of runs) {
+      if (!run.text.includes('_') || !run.text.includes('$')) continue;
+      if (!validateMixedRunText(run.text)) return;
+    }
+
+    crossingIndices.forEach((index) => unwrapCrossingEmphasis(topEms[index]));
+  }
+
+  function unwrapCrossingEmphasis(em) {
+    const marker = document.createTextNode('_');
+    em.before(marker.cloneNode(false));
+    em.after(marker.cloneNode(false));
+    em.replaceWith(...Array.from(em.childNodes));
+  }
+
+  function validateMixedRunText(runText) {
+    const normalized = runText.includes('\n') ? flattenSplitInlineMath(runText) : runText;
+    if (!isSafeMixedTextMath(normalized, { allowUndefinedCommands: true })) return false;
+    const wrapper = document.createElement('span');
+    wrapper.textContent = normalized;
+    try {
+      renderMathInto(wrapper);
+      return hasAcceptableMathResult(wrapper);
+    } catch (error) {
+      warn('failed to render crossing emphasis math:', error);
+      return false;
+    }
+  }
+
+  // Markdown-damaged inline formulas can survive as emphasis elements: the
+  // underscore/subscript pair `_..._` becomes `<em>...</em>`, splitting one
+  // `$...$` formula across several text runs. Reconstruct the group of runs
+  // connected only by plain emphasis elements, reverse the emphasis back to
+  // its original markers (strictly inside the math range), and rescue the
+  // group as one formula when the reconstructed text validates while no
+  // individual member run did.
+  function rescueEmphasisSplitMathRuns(el, runs) {
+    const bridgeAnchor = (node) => {
+      if (!node || node.nodeType !== Node.TEXT_NODE) return null;
+      let anchor = node;
+      let em = node.parentElement;
+      while (em && em.matches('em, i') && !em.querySelector('*') && em.childNodes.length === 1) {
+        anchor = em;
+        em = em.parentElement;
+      }
+      return anchor;
+    };
+
+    const groups = [];
+    let currentGroup = null;
+    for (let i = 0; i < runs.length; i++) {
+      const run = runs[i];
+      if (!run.nodes[0]?.isConnected) {
+        currentGroup = null;
+        continue;
+      }
+      if (!currentGroup) {
+        currentGroup = { runs: [run] };
+        groups.push(currentGroup);
+        continue;
+      }
+      const previousRun = currentGroup.runs[currentGroup.runs.length - 1];
+      const endAnchor = bridgeAnchor(previousRun.nodes[previousRun.nodes.length - 1]);
+      const startAnchor = bridgeAnchor(run.nodes[0]);
+      if (!endAnchor || endAnchor.nextSibling !== startAnchor) {
+        currentGroup = null;
+        continue;
+      }
+      currentGroup.runs.push(run);
+    }
+
+    groups.forEach((group) => {
+      if (group.runs.length < 2) return;
+      const fragment = document.createElement('span');
+      const appendedEm = new Set();
+      group.runs.forEach((run) => {
+        run.nodes.forEach((node) => {
+          const anchor = bridgeAnchor(node);
+          if (anchor && anchor.nodeType === Node.ELEMENT_NODE) {
+            if (!appendedEm.has(anchor)) {
+              appendedEm.add(anchor);
+              fragment.appendChild(anchor.cloneNode(true));
+            }
+          } else {
+            fragment.appendChild(node.cloneNode(true));
+          }
+        });
+      });
+      const rawText = group.runs.map((run) => run.text).join('');
+      let groupText = getMathAwareTextExcludingRendered(fragment);
+      groupText = groupText.includes('\n') ? flattenSplitInlineMath(groupText) : groupText;
+      if (groupText === rawText) return;
+      if (!isSafeMixedTextMath(groupText, { allowUndefinedCommands: true })) return;
+      const wrapper = document.createElement('span');
+      wrapper.textContent = groupText;
+
+      try {
+        renderMathInto(wrapper);
+        if (!hasAcceptableMathResult(wrapper)) return;
+
+        const host = document.createElement('span');
+        host.className = 'elm-math-rescued-text';
+        host.dataset.rawText = groupText;
+        while (wrapper.firstChild) host.appendChild(wrapper.firstChild);
+        const allNodes = group.runs.flatMap((run) => run.nodes);
+        allNodes[0].replaceWith(host);
+        for (let i = 1; i < allNodes.length; i++) allNodes[i].remove();
+        el.querySelectorAll('em:empty, i:empty, strong:empty, b:empty').forEach((node) => node.remove());
+      } catch (error) {
+        warn('failed to render emphasis-split mixed text math:', error);
       }
     });
   }
@@ -541,7 +705,7 @@
     });
 
     const mathNodes = positionedNodes.filter(({ start, end }) =>
-      mathRanges.some((mathRange) => start >= mathRange.start && end <= mathRange.end)
+      mathRanges.some((mathRange) => start > mathRange.start && end < mathRange.end)
     );
     if (mathNodes.length === 0) return clone;
 

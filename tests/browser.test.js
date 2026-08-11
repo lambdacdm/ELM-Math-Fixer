@@ -313,6 +313,10 @@ $$
         <p id="mispaired-native-symbol">Symbols $A<span><span class="katex"><annotation encoding="application/x-tex">B</annotation></span></span>C$.</p>
         <ul><li id="mispaired-native-multiple">First $x<span><span class="katex"><annotation encoding="application/x-tex"> plus prose </annotation></span></span>y$. <strong>Cases (1), (2), and (3).</strong> Second $a<span><span class="katex"><annotation encoding="application/x-tex"> more prose </annotation></span></span>b$.</li></ul>
         <ul><li id="mixed-valid-and-mispaired"><strong>$w=-1$</strong>: Gives $1-w=2$. Also $A<span><span class="katex"><annotation encoding="application/x-tex">and</annotation></span></span>B$.</li></ul>
+        <p id="mixed-emphasis-inline">Since <span class="katex"><annotation encoding="application/x-tex">n\\geq2</annotation></span>, we have <span class="katex"><annotation encoding="application/x-tex">c&gt;1</annotation></span>, and hence $ \\operatorname{Li}<em>n^{\\mathfrak u}(\\xi)\\in V</em>{pr} $. This proves <span class="katex"><annotation encoding="application/x-tex">V_r\\subseteq V_{pr}</annotation></span>.</p>
+        <p id="mixed-emphasis-negative">Before $ f<em>\\left(x</em> $ after <span class="katex"><annotation encoding="application/x-tex">m</annotation></span>.</p>
+        <p id="mixed-emphasis-crossing">Since <span class="katex"><annotation encoding="application/x-tex">m</annotation></span> is <span class="katex"><annotation encoding="application/x-tex">\\mu_m</annotation></span>, the $ \\operatorname{Li}<em>n^{\\mathfrak u}(\\xi) $, with <span class="katex"><annotation encoding="application/x-tex">\\xi</annotation></span> a primitive <span class="katex"><annotation encoding="application/x-tex">r</annotation></span>-th root, and $ E_n(Z)=\\sum</em>{r\\mid m}V_r $.</p>
+        <p id="mixed-emphasis-prose">At $x$, <em>italic</em>, and at $y$.</p>
         <p id="mispaired-native-unknown">Because $K<span><span class="katex"><annotation encoding="application/x-tex">is a field and</annotation></span></span>\\cO_K^\\times$ is used. Before $1-w=2$.</p>
         <p id="normal-native">A normal <span class="katex"><annotation encoding="application/x-tex">x+1</annotation></span> formula.</p>
         <p id="currency">Tickets cost $5 and $10.</p>
@@ -552,6 +556,21 @@ For the depth-one basis, one has
       mixedValidMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-rescued-text .katex').length,
       mixedLocalMath: document.querySelectorAll('#mixed-valid-and-mispaired .elm-math-local-rendered .katex').length,
       mixedStrongPreserved: Boolean(document.querySelector('#mixed-valid-and-mispaired > strong .elm-math-rescued-text')),
+      mixedEmphasisRescued: document.querySelectorAll('#mixed-emphasis-inline .elm-math-rescued-text').length,
+      mixedEmphasisKatex: document.querySelectorAll('#mixed-emphasis-inline .elm-math-rescued-text .katex').length,
+      mixedEmphasisTex: annotation('#mixed-emphasis-inline .elm-math-rescued-text annotation[encoding="application/x-tex"]'),
+      mixedEmphasisNative: document.querySelectorAll('#mixed-emphasis-inline > .katex').length,
+      mixedEmphasisEm: document.querySelectorAll('#mixed-emphasis-inline em').length,
+      mixedEmphasisNegativeRescued: document.querySelectorAll('#mixed-emphasis-negative .elm-math-rescued-text').length,
+      mixedEmphasisNegativeEm: document.querySelectorAll('#mixed-emphasis-negative em').length,
+      mixedCrossingRescued: document.querySelectorAll('#mixed-emphasis-crossing .elm-math-rescued-text').length,
+      mixedCrossingKatex: document.querySelectorAll('#mixed-emphasis-crossing .elm-math-rescued-text .katex').length,
+      mixedCrossingTex: Array.from(document.querySelectorAll('#mixed-emphasis-crossing .elm-math-rescued-text annotation[encoding="application/x-tex"]'))
+        .map((annotationNode) => annotationNode.textContent).join('|'),
+      mixedCrossingNative: document.querySelectorAll('#mixed-emphasis-crossing > .katex').length,
+      mixedCrossingEm: document.querySelectorAll('#mixed-emphasis-crossing em').length,
+      mixedProseEm: document.querySelectorAll('#mixed-emphasis-prose .elm-math-rescued-wrapper em').length,
+      mixedProseEmText: document.querySelector('#mixed-emphasis-prose .elm-math-rescued-wrapper em')?.textContent,
       normalNativeRepairs: document.querySelectorAll('#normal-native > .elm-math-local-chain').length,
       currencyWrapper: document.querySelectorAll('#currency > .elm-math-rescued-wrapper').length,
       currencyText: document.querySelector('#currency')?.textContent,
@@ -796,6 +815,21 @@ For the depth-one basis, one has
   assert(initial.currencyText === 'Tickets cost $5 and $10.', 'currency text was modified');
   assert(initial.unmatchedWrapper === 0, 'an unmatched dollar sign was treated as math');
   assert(initial.subscriptTex.includes('L_n(z_1)'), 'Markdown-damaged subscript was not restored');
+  assert(initial.mixedEmphasisRescued === 1 && initial.mixedEmphasisKatex === 1 &&
+    initial.mixedEmphasisTex.includes('\\operatorname{Li}_n^{\\mathfrak u}(\\xi)\\in V_{pr}'),
+    `emphasis-broken inline math in a native-rendered paragraph was not rescued: rescued ${initial.mixedEmphasisRescued}, tex ${initial.mixedEmphasisTex}`);
+  assert(initial.mixedEmphasisNative === 3 && initial.mixedEmphasisEm === 0,
+    `native math was disturbed or emphasis kept around a rescued formula: native ${initial.mixedEmphasisNative}, em ${initial.mixedEmphasisEm}`);
+  assert(initial.mixedEmphasisNegativeRescued === 0 && initial.mixedEmphasisNegativeEm === 1,
+    'emphasis-broken math that cannot be reconstructed must be refused, not repaired');
+  assert(initial.mixedCrossingRescued === 2 && initial.mixedCrossingKatex === 2 &&
+    initial.mixedCrossingTex.includes('\\operatorname{Li}_n^{\\mathfrak u}(\\xi)') &&
+    initial.mixedCrossingTex.includes('E_n(Z)=\\sum_{r\\mid m}V_r'),
+    `one emphasis element spanning two broken formulas was not rescued in full: rescued ${initial.mixedCrossingRescued} (${initial.mixedCrossingTex})`);
+  assert(initial.mixedCrossingNative === 4 && initial.mixedCrossingEm === 0,
+    `crossing emphasis rescue disturbed native math or kept the damaged emphasis: native ${initial.mixedCrossingNative}, em ${initial.mixedCrossingEm}`);
+  assert(initial.mixedProseEm === 1 && initial.mixedProseEmText === 'italic',
+    'genuine prose emphasis between formulas was disturbed');
   assert(initial.strongPreserved && initial.strongWrapper === 0, 'ordinary strong text was modified');
   assert(initial.codeRendered > 0, 'code-wrapped math was not rendered');
   assert(initial.codeBlockEscapeText?.includes('\\frac') && !initial.codeBlockEscapeText?.includes('\\\\frac'),
