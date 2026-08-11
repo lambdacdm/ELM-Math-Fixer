@@ -9,13 +9,15 @@
   const hasMath = (text) => text.includes('$') || text.includes('\\(') || text.includes('\\[');
 
   function countMathDelimiters(text) {
-    const tokens = text.match(/\$\$|\$(?!\$)|\\[\[\]()]/g) || [];
+    const tokens = text.match(
+      /(?<!\\)(?:\\\\)*\$\$|(?<!\\)(?:\\\\)*\$(?!\$)|(?<!\\)(?:\\\\)*\\[\[\]()]/g
+    ) || [];
     let delimiters = 0;
     let dollars = 0;
     let brackets = 0;
     for (const token of tokens) {
-      if (token === '$$') delimiters++;
-      else if (token === '$') dollars++;
+      if (token.endsWith('$$')) delimiters++;
+      else if (token.endsWith('$')) dollars++;
       else brackets++;
     }
     return { delimiters, dollars, brackets };

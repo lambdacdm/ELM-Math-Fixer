@@ -118,6 +118,17 @@ $$</p>
 N_{K/\\mathbb Q}(\\pi_a)</h1><h1>N_{K/\\mathbb Q}(1-4\\zeta_q^a)</h1><p>l.
 $$</p>
       </section>
+      <section class="markdown" id="setext-eaten-paren-case">
+        <h1>$$
+P_w(\\chi)</h1>
+        <p>\\sum_{\\substack{a\\bmod w\\\\(a,w)=1}}
+\\overline{\\chi_0(a)}
+L_n(\\eta^a).
+$$</p>
+      </section>
+      <section class="markdown" id="substack-eaten-paren-intact-case">
+        <p>$$ P_w(\\chi)=\\sum_{\\substack{a\\bmod w\\\\(a,w)=1}} \\overline{\\chi_0(a)} L_n(\\eta^a). $$</p>
+      </section>
       <section class="markdown" id="setext-eaten-bracket-case">
         <h1>[
 X(\\mathcal O_{K,S})</h1><p>{\\lambda\\in K\\setminus{0,1}:\\lambda,;1-\\lambda\\in \\mathcal O_{K,S}^{\\times}}.
@@ -425,6 +436,13 @@ For the depth-one basis, one has
       setextDoubleH1Rendered: document.querySelectorAll('#setext-double-h1-case > .elm-math-rescued-block .katex').length,
       setextDoubleH1Raw: document.querySelector('#setext-double-h1-case > .elm-math-rescued-block')?.dataset.rawText,
       setextDoubleH1Reason: document.querySelector('#setext-double-h1-case > .elm-math-rescued-block')?.dataset.repairReason,
+      setextEatenParenBlocks: document.querySelectorAll('#setext-eaten-paren-case > .elm-math-rescued-block').length,
+      setextEatenParenRendered: document.querySelectorAll('#setext-eaten-paren-case > .elm-math-rescued-block .katex').length,
+      setextEatenParenRaw: document.querySelector('#setext-eaten-paren-case > .elm-math-rescued-block')?.dataset.rawText,
+      setextEatenParenReason: document.querySelector('#setext-eaten-paren-case > .elm-math-rescued-block')?.dataset.repairReason,
+      substackIntactWrapper: document.querySelectorAll('#substack-eaten-paren-intact-case .elm-math-rescued-wrapper').length,
+      substackIntactRendered: document.querySelectorAll('#substack-eaten-paren-intact-case .katex').length,
+      substackIntactTex: annotation('#substack-eaten-paren-intact-case annotation[encoding="application/x-tex"]'),
       setextEatenBracketBlocks: document.querySelectorAll('#setext-eaten-bracket-case > .elm-math-rescued-block').length,
       setextEatenBracketRendered: document.querySelectorAll('#setext-eaten-bracket-case > .elm-math-rescued-block .katex').length,
       setextEatenBracketRaw: document.querySelector('#setext-eaten-bracket-case > .elm-math-rescued-block')?.dataset.rawText,
@@ -613,6 +631,17 @@ For the depth-one basis, one has
     `the double-h1 chain was not reconstructed faithfully: ${initial.setextDoubleH1Raw}`);
   assert(initial.setextDoubleH1Reason === 'setext-operators',
     'double-h1 Setext chain marker is missing');
+  assert(initial.setextEatenParenBlocks === 1 && initial.setextEatenParenRendered > 0,
+    `a Setext-split formula with a \\\\( row break before a paren was not rescued: blocks ${initial.setextEatenParenBlocks}, katex ${initial.setextEatenParenRendered}`);
+  assert(initial.setextEatenParenRaw?.includes('P_w(\\chi)') &&
+    initial.setextEatenParenRaw?.includes('\n=\n') &&
+    initial.setextEatenParenRaw?.includes('\\substack{a\\bmod w\\\\(a,w)=1}'),
+    `the eaten-paren chain was not reconstructed faithfully: ${initial.setextEatenParenRaw}`);
+  assert(initial.setextEatenParenReason === 'setext-equals',
+    `eaten-paren Setext chain marker is missing: ${initial.setextEatenParenReason}`);
+  assert(initial.substackIntactWrapper === 1 && initial.substackIntactRendered > 0 &&
+    initial.substackIntactTex.includes('\\substack{a\\bmod w\\\\(a,w)=1}'),
+    `an intact formula with a \\\\( row break was not rescued: wrapper ${initial.substackIntactWrapper}, katex ${initial.substackIntactRendered}, tex ${initial.substackIntactTex}`);
   assert(initial.setextEatenBracketBlocks === 1 && initial.setextEatenBracketRendered > 0,
     `a \\[...\\] formula with Markdown-eaten backslashes was not rescued: blocks ${initial.setextEatenBracketBlocks}, katex ${initial.setextEatenBracketRendered}`);
   assert(initial.setextEatenBracketRaw?.startsWith('\\[') &&
