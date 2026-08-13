@@ -1157,14 +1157,19 @@ async function runModernUiTest(browser) {
     nav { display: flex; flex-direction: column; width: 270px; }
     .nav-item { align-items: center; border: 0; display: flex; height: 54px; padding: 0 26px; width: 100%; }
     #tools { height: 42px; width: 90px; }
-    .right, .look-group { align-items: center; display: flex; gap: 10px; }
-    .look-group { margin-left: auto; }
-    #native-switch { background: rgb(18, 83, 62); height: 38px; width: 62px; }
-    @media (max-width: 1120px) { aside, .look-group span { display: none; } }
+    .right { align-items: center; display: flex; gap: 10px; }
+    .right button { height: 40px; }
+    .composer { align-items: center; background: #ddd; bottom: 0; display: flex; gap: 8px; height: 56px; justify-content: flex-end; padding: 0 16px; position: absolute; width: 100%; }
+    .composer button { height: 34px; }
+    .banner { background: #fffbe6; font-size: 13px; height: 180px; padding: 16px 70px 16px 30px; position: relative; }
+    .banner-dismiss { height: 34px; position: absolute; right: 16px; top: 16px; width: 34px; }
+    @media (max-width: 1120px) { aside { display: none; } }
   </style></head><body>
-    <header><button id="tools">Tools</button><div class="right"><div class="look-group"><span>Try our new look!</span><button id="native-switch" role="switch"></button></div><button>Request an API Key</button></div></header>
+    <div class="banner">Hi everyone! We're very happy to see everyone jumping into the new Claude/Anthropic models! However, please keep in mind that Opus is very expensive to the university. Try to rely on it only for your most difficult tasks, and use Sonnet for everything else. Check out the new Model Guides (under Tools) to see the relative costs of all the models ELM has to offer. <button class="banner-dismiss" id="banner-dismiss">&#215;</button></div>
+    <header><button id="tools">Tools</button><div class="right"><button id="chat-icon">Chat</button><button id="api-key">Request an API Key</button></div></header>
     <aside><nav><button class="nav-item"><span>Prompts</span></button><button class="nav-item" id="model-guide"><span>Model Guide</span></button><button class="nav-item"><span>Folders</span></button></nav></aside>
     <main class="markdown"><p>Modern response.</p></main>
+    <div class="composer"><button id="composer-attach">Attach</button><button id="composer-emoji">Emoji</button><button id="composer-send">Send</button></div>
   </body></html>`);
   await loadContentScripts(page);
   await page.waitForTimeout(500);
@@ -1175,20 +1180,42 @@ async function runModernUiTest(browser) {
     return {
       promptInSidebar: prompt?.parentElement?.tagName === 'NAV',
       promptBeforeModelGuide: prompt?.nextElementSibling?.id === 'model-guide',
-      toggleBeforeNativeGroup: toggle?.nextElementSibling?.classList.contains('look-group'),
+      toggleBeforeChatIcon: toggle?.nextElementSibling?.id === 'chat-icon',
+      toggleInComposer: Boolean(toggle?.closest('.composer')),
+      toggleInBanner: Boolean(toggle?.closest('.banner')),
+      toggleCompactClass: toggle?.classList.contains('elm-mf-compact'),
+      toggleFallbackClass: toggle?.classList.contains('elm-mf-fallback'),
+      labelVisible: getComputedStyle(toggle?.querySelector('.elm-mf-switch-label')).display !== 'none',
+      trackVisible: getComputedStyle(toggle?.querySelector('.elm-mf-switch-track')).display !== 'none',
+      powerHidden: getComputedStyle(toggle?.querySelector('.elm-mf-power-icon')).display === 'none',
       switchSymbol: getComputedStyle(toggle?.querySelector('.elm-mf-switch-thumb'), '::after').content,
       promptClass: prompt?.className
     };
   });
 
   assert(result.promptInSidebar && result.promptBeforeModelGuide,
-    'modern Fixer Prompts launcher is not in the expected sidebar position');
-  assert(result.toggleBeforeNativeGroup, 'modern Fixer switch is not before the native look control');
+    'Fixer Prompts launcher is not in the expected sidebar position');
+  assert(result.toggleBeforeChatIcon,
+    'Fixer switch is not placed left of the top bar control cluster');
+  assert(!result.toggleInComposer,
+    'Fixer switch was inserted into the bottom chat input bar');
+  assert(!result.toggleInBanner,
+    'Fixer switch was anchored to the dismissible message banner instead of the top bar');
+  assert(!result.toggleCompactClass && !result.toggleFallbackClass,
+    'wide layout still uses the compact Fixer switch');
+  assert(result.labelVisible && result.trackVisible && result.powerHidden,
+    'wide Fixer switch does not show the full slider');
   assert(result.switchSymbol.includes('✓'), 'enabled Fixer switch does not show a check mark');
 
   await page.evaluate(() => document.querySelector('#elm-math-fixer-prompt-button').click());
   const copyButtons = await page.locator('#elm-math-fixer-prompt-panel .elm-mf-copy').count();
   assert(copyButtons === 4, 'prompt catalog did not load in the modern UI');
+
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  const offSymbol = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('#elm-math-fixer-toggle .elm-mf-switch-thumb'), '::after').content
+  );
+  assert(offSymbol.includes('−'), 'disabled Fixer switch does not show a minus sign');
 
   await page.setViewportSize({ width: 900, height: 500 });
   await page.waitForTimeout(300);
@@ -1197,66 +1224,55 @@ async function runModernUiTest(browser) {
     const toggle = document.querySelector('#elm-math-fixer-toggle');
     return {
       promptHidden: getComputedStyle(prompt).display === 'none',
-      compactToggle: toggle.classList.contains('elm-mf-compact'),
-      powerVisible: getComputedStyle(toggle.querySelector('.elm-mf-power-icon')).display !== 'none'
+      powerVisible: getComputedStyle(toggle.querySelector('.elm-mf-power-icon')).display !== 'none',
+      labelHidden: getComputedStyle(toggle.querySelector('.elm-mf-switch-label')).display === 'none'
     };
   });
   assert(narrow.promptHidden, 'prompt launcher should be hidden when the sidebar is unavailable');
-  assert(narrow.compactToggle && narrow.powerVisible, 'narrow layout did not use the compact Fixer control');
+  assert(narrow.powerVisible && narrow.labelHidden,
+    'narrow layout did not switch to the compact Fixer control');
 
   await page.close();
   return { wide: result, narrow };
 }
 
-async function runLegacyUiTest(browser) {
-  const page = await browser.newPage({ viewport: { width: 1500, height: 760 } });
+async function runNoTopBarControlsTest(browser) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 500 } });
   await page.setContent(`<!doctype html><html><head><style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Arial, sans-serif; }
-    header { align-items: center; display: flex; height: 78px; justify-content: flex-end; gap: 18px; padding: 0 24px; }
-    .look-group { align-items: center; display: flex; gap: 8px; }
-    #native-switch { height: 36px; width: 58px; }
-    aside { border-right: 1px solid #ddd; height: 682px; width: 420px; }
-    .tabs { display: grid; grid-template-columns: repeat(3, 1fr); height: 54px; }
-    .tab { font-size: 17px; }
-    .prompt-panel { padding: 28px 0; }
-    .prompt-panel p { margin: 0 14px 24px; }
-    .add { height: 48px; margin: 0 10px 8px; width: 400px; }
-    .actions { display: flex; gap: 8px; margin: 0 10px; }
-    .actions button { height: 48px; width: 196px; }
+    body { margin: 0; }
+    header { background: #e5e5e5; height: 92px; }
+    main.markdown { padding: 10px; }
+    .composer { align-items: center; background: #ddd; bottom: 0; display: flex; gap: 8px; height: 56px; justify-content: flex-end; padding: 0 16px; position: absolute; width: 100%; }
+    .composer button { height: 34px; }
+    .banner { background: #fffbe6; height: 120px; padding: 14px; position: relative; }
+    .banner-dismiss { height: 34px; position: absolute; right: 16px; top: 16px; width: 34px; }
   </style></head><body>
-    <header><button>Request an API Key</button><div class="look-group"><span>Try our new look!</span><button id="native-switch" role="switch"></button></div><button>Settings</button></header>
-    <aside><div class="tabs"><button class="tab">History</button><button class="tab">Documents</button><button class="tab">Prompts</button></div>
-      <div class="prompt-panel"><p>Select your prompt to change or refine how ELM replies.</p><p>Any custom prompts you create are private.</p><button class="add">Add Prompt</button><div class="actions"><button>Edit</button><button>Delete</button></div></div>
-    </aside>
-    <main class="markdown"><p>Legacy response.</p></main>
+    <div class="banner">Dismissible message banner with its own dismiss control. <button class="banner-dismiss" id="banner-dismiss">&#215;</button></div>
+    <header></header>
+    <main class="markdown"><p>No top bar controls.</p></main>
+    <div class="composer"><button id="composer-attach">Attach</button><button id="composer-emoji">Emoji</button><button id="composer-send">Send</button></div>
   </body></html>`);
   await loadContentScripts(page);
   await page.waitForTimeout(500);
 
   const result = await page.evaluate(() => {
-    const prompt = document.querySelector('#elm-math-fixer-prompt-button');
     const toggle = document.querySelector('#elm-math-fixer-toggle');
     return {
-      legacyClass: prompt?.classList.contains('elm-mf-legacy-sidebar'),
-      promptAfterActions: prompt?.previousElementSibling?.classList.contains('actions'),
-      toggleBeforeNativeGroup: toggle?.nextElementSibling?.classList.contains('look-group')
+      compact: toggle?.classList.contains('elm-mf-compact'),
+      fallback: toggle?.classList.contains('elm-mf-fallback'),
+      powerVisible: getComputedStyle(toggle?.querySelector('.elm-mf-power-icon')).display !== 'none',
+      positionFixed: getComputedStyle(toggle).position === 'fixed',
+      inComposer: Boolean(toggle?.closest('.composer')),
+      inBanner: Boolean(toggle?.closest('.banner'))
     };
   });
-
-  assert(result.legacyClass && result.promptAfterActions,
-    'legacy Fixer Prompts launcher is not after the prompt actions');
-  assert(result.toggleBeforeNativeGroup, 'legacy Fixer switch is not before the native look control');
-
-  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
-  const offSymbol = await page.evaluate(() =>
-    getComputedStyle(document.querySelector('#elm-math-fixer-toggle .elm-mf-switch-thumb'), '::after').content
-  );
-  assert(offSymbol.includes('−'), 'disabled Fixer switch does not show a minus sign');
-
-  await page.evaluate(() => document.querySelector('#elm-math-fixer-prompt-button').click());
-  const copyButtons = await page.locator('#elm-math-fixer-prompt-panel .elm-mf-copy').count();
-  assert(copyButtons === 4, 'prompt catalog did not load in the legacy UI');
+  assert(result.compact && result.fallback && result.powerVisible && result.positionFixed,
+    'a missing top bar did not fall back to the compact Fixer switch');
+  assert(!result.inComposer,
+    'without top bar controls the Fixer switch was inserted into the chat input bar');
+  assert(!result.inBanner,
+    'a lone banner dismiss control was treated as a top bar anchor');
   await page.close();
   return result;
 }
@@ -1269,15 +1285,16 @@ async function runLegacyUiTest(browser) {
   try {
     const result = await runMathRepairTests(browser);
     const modern = await runModernUiTest(browser);
-    const legacy = await runLegacyUiTest(browser);
+    const noControls = await runNoTopBarControlsTest(browser);
     console.log(`Browser tests passed: ${JSON.stringify({
       setext: result.initial.setextReason,
       splitBlocks: result.initial.splitBlocks,
       incrementalMath: result.afterMutation.lateRendered,
       restoredBlocks: result.restored.blocks,
       modernSidebar: modern.wide.promptInSidebar,
-      compactFixer: modern.narrow.compactToggle,
-      legacySidebar: legacy.legacyClass
+      toggleBeforeChatIcon: modern.wide.toggleBeforeChatIcon,
+      compactFixer: modern.narrow.powerVisible,
+      fallbackToggle: noControls.compact
     })}`);
   } finally {
     await browser.close();

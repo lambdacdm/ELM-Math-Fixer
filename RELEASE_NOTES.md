@@ -1,11 +1,11 @@
-# ELM Math Fixer v1.3.7
+# ELM Math Fixer v1.3.8
 
-## What's New since v1.3.6
+## What's New since v1.3.7
 
 ### Bug fixes
-- **Markdown-eaten math split across two formulas** (v1.3.7): one `_..._` subscript "damage" pair can now span from inside one `$...$` formula, across prose and already-rendered math, into the next `$...$` formula (e.g. `\operatorname{Li}_n^{...}(\xi)` and `E_n(Z)=\sum_{r\mid m}V_r`). Such a formula pair is recognized only when both of its ends sit inside unpaired math delimiters, reconstructed on a detached clone, and committed only when the restored runs render cleanly; genuine prose emphasis between formulas is never touched.
-- **Emphasis-broken inline math in rendered paragraphs** (v1.3.7): inline `$...$` formulas whose subscript pair Markdown turned into `<em>...</em>` are now repaired inside paragraphs that already contain native KaTeX (e.g. `\operatorname{Li}<em>n^{...}\in V</em>{pr}`), restoring the original underscores and rendering the formula while leaving neighbouring native math and ordinary prose emphasis intact.
+- **Fixer switch no longer lands in the chat input bar** (v1.3.8): the top bar scan now only considers controls within the top 70% of the viewport, so the Fixer switch can no longer anchor to the chat composer at the bottom of the page, even when the composer holds more buttons than the top bar.
+- **Fixer switch stays on the top bar when the announcement banner is shown** (v1.3.8): with the dismissible message banner above the top bar, the switch is anchored to the top bar control cluster even when the banner wraps tall and pushes the top bar down. A lone banner dismiss control is never treated as a top bar anchor; without at least two top bar controls the switch falls back to the compact floating control instead.
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.3.7.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.3.8.zip`.

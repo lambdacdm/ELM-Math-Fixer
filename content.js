@@ -13,8 +13,6 @@
   let fixerEnabledFallback = true;
   let toolsAttentionTimer = null;
   let sidebarAttentionTimer = null;
-  let nativePaletteControl = null;
-  let nativePaletteCache = null;
 
   const PROMPT_GROUPS = globalThis.ELMMathFixerPrompts || [];
 
@@ -210,14 +208,6 @@
     showPromptLocationGuide(findToolsControl(), 'Fixer Prompts is inside Tools.', 'Open Tools');
   }
 
-  function showLegacyPromptsGuide() {
-    showPromptLocationGuide(
-      findLegacyPromptTabControl(),
-      'Fixer Prompts is inside Prompts.',
-      'Open Prompts'
-    );
-  }
-
   function highlightPromptDiscovery(button) {
     removeToolsGuide();
     if (button.dataset.discoveryHighlighted === 'true') return;
@@ -237,55 +227,17 @@
       return;
     }
 
-    if (button.classList.contains('elm-mf-sidebar') || button.classList.contains('elm-mf-legacy-sidebar')) {
+    if (button.classList.contains('elm-mf-sidebar')) {
       highlightPromptDiscovery(button);
       return;
     }
 
     button.classList.remove('elm-mf-attention');
-    if (isLegacyLayout()) {
-      showLegacyPromptsGuide();
-    } else {
-      showToolsGuide();
-    }
+    showToolsGuide();
   }
 
   function isExtensionToolbarControl(control) {
     return control.id === PROMPT_BUTTON_ID || control.id === FIXER_TOGGLE_ID;
-  }
-
-  function findTopBarPromptAnchor() {
-    return Array.from(document.querySelectorAll('span, div, p, label')).find((node) => {
-      const text = (node.textContent || '').trim();
-      return text === 'Try our new look!' && node.children.length === 0 && isVisible(node);
-    });
-  }
-
-  function unwrapPromptAnchor(button, anchor) {
-    const wrapper = anchor.parentElement;
-    if (!wrapper?.classList?.contains('elm-mf-anchor-wrap') || !wrapper.parentElement) return;
-
-    const parent = wrapper.parentElement;
-    parent.insertBefore(button, wrapper);
-    parent.insertBefore(anchor, wrapper);
-    wrapper.remove();
-  }
-
-  function findNearbyTryNewLookControl(anchor) {
-    const anchorRect = anchor.getBoundingClientRect();
-    return Array.from(
-      document.querySelectorAll('button, [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
-    )
-      .filter((control) => {
-        if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
-        const controlRect = control.getBoundingClientRect();
-        return Math.abs(controlRect.top - anchorRect.top) < 48 && Math.abs(controlRect.left - anchorRect.left) < 220;
-      })
-      .sort((a, b) => {
-        const aRect = a.getBoundingClientRect();
-        const bRect = b.getBoundingClientRect();
-        return Math.abs(aRect.left - anchorRect.left) - Math.abs(bRect.left - anchorRect.left);
-      })[0];
   }
 
   function parseRgbColor(color) {
@@ -301,11 +253,7 @@
   }
 
   function readElmAccentColor() {
-    const anchor = findTopBarPromptAnchor();
-    const nativeSwitch = anchor ? findNearbyTryNewLookControl(anchor) : null;
-    const roots = nativeSwitch
-      ? [nativeSwitch, nativeSwitch.parentElement].filter(Boolean)
-      : getVisibleTopBarControls();
+    const roots = getVisibleTopBarControls();
     let best = null;
 
     roots.forEach((root) => {
@@ -333,107 +281,6 @@
     return best?.color || null;
   }
 
-  function resolveCssColor(value, context) {
-    if (!value || !context) return null;
-    const host = context.matches?.('input') ? context.parentElement : context;
-    if (!host) return null;
-
-    const probe = document.createElement('span');
-    probe.style.cssText = 'all:initial;position:absolute;display:block;width:1px;height:1px;visibility:hidden;pointer-events:none;';
-    probe.style.backgroundColor = value.trim();
-    host.appendChild(probe);
-    const color = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return parseRgbColor(color) ? color : null;
-  }
-
-  function readNativeSwitchVariable(control, names) {
-    const nodes = [control, ...control.querySelectorAll('*')];
-    for (const node of nodes) {
-      const style = getComputedStyle(node);
-      for (const name of names) {
-        const value = style.getPropertyValue(name).trim();
-        const color = resolveCssColor(value, node);
-        if (color) return color;
-      }
-    }
-    return null;
-  }
-
-  function sampleNativeSwitchNeutrals(control) {
-    const candidates = [];
-    [control, ...control.querySelectorAll('*')].forEach((node) => {
-      const rect = node.getBoundingClientRect();
-      [null, '::before', '::after'].forEach((pseudo) => {
-        let style;
-        try {
-          style = getComputedStyle(node, pseudo);
-        } catch {
-          return;
-        }
-        const rgb = parseRgbColor(style.backgroundColor);
-        if (!rgb || rgb.a <= 0.15) return;
-        const spread = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
-        if (spread > 45) return;
-
-        const width = Number.parseFloat(style.width) || rect.width;
-        const height = Number.parseFloat(style.height) || rect.height;
-        if (width < 14 || height < 14 || width > 110 || height > 60) return;
-        candidates.push({
-          color: style.backgroundColor,
-          border: style.borderStyle !== 'none' && Number.parseFloat(style.borderWidth) > 0 &&
-            parseRgbColor(style.borderColor) ? style.borderColor : null,
-          foreground: parseRgbColor(style.color) ? style.color : null,
-          width,
-          height,
-          brightness: (rgb.r + rgb.g + rgb.b) / 3
-        });
-      });
-    });
-
-    const tracks = candidates.filter(({ width, height }) => width / height >= 1.35);
-    const thumbs = candidates.filter(({ width, height }) => Math.abs(width - height) <= 8 && width <= 42);
-    tracks.sort((a, b) => b.brightness - a.brightness);
-    thumbs.sort((a, b) => a.brightness - b.brightness);
-    return { track: tracks[0] || null, thumb: thumbs[0] || null };
-  }
-
-  function readNativeSwitchOffPalette() {
-    const anchor = findTopBarPromptAnchor();
-    const control = anchor ? findNearbyTryNewLookControl(anchor) : null;
-    if (!control) return null;
-    if (nativePaletteControl === control && nativePaletteCache) return nativePaletteCache;
-
-    const trackVariables = [
-      '--mdc-switch-unselected-track-color',
-      '--mat-switch-unselected-track-color',
-      '--mat-slide-toggle-bar-color'
-    ];
-    const thumbVariables = [
-      '--mdc-switch-unselected-handle-color',
-      '--mat-switch-unselected-handle-color',
-      '--mat-slide-toggle-thumb-color'
-    ];
-    const borderVariables = [
-      '--mdc-switch-unselected-track-outline-color',
-      '--mat-switch-unselected-track-outline-color'
-    ];
-    const iconVariables = [
-      '--mdc-switch-unselected-icon-color',
-      '--mat-switch-unselected-icon-color'
-    ];
-    const sampled = sampleNativeSwitchNeutrals(control);
-
-    nativePaletteControl = control;
-    nativePaletteCache = {
-      track: readNativeSwitchVariable(control, trackVariables) || sampled.track?.color || '#dce3df',
-      thumb: readNativeSwitchVariable(control, thumbVariables) || sampled.thumb?.color || '#748178',
-      border: readNativeSwitchVariable(control, borderVariables) || sampled.track?.border || '#829188',
-      icon: readNativeSwitchVariable(control, iconVariables) || sampled.thumb?.foreground || '#dfe5e1'
-    };
-    return nativePaletteCache;
-  }
-
   function syncElmAccentColor(promptButton, toggle) {
     const accent = readElmAccentColor();
     if (accent) {
@@ -443,66 +290,15 @@
         }
       });
     }
-
-    const offPalette = readNativeSwitchOffPalette();
-    if (offPalette) {
-      toggle.style.setProperty('--elm-mf-off-track', offPalette.track);
-      toggle.style.setProperty('--elm-mf-off-thumb', offPalette.thumb);
-      toggle.style.setProperty('--elm-mf-off-border', offPalette.border);
-      toggle.style.setProperty('--elm-mf-off-icon', offPalette.icon);
-    }
-
-    const nativeLabel = findTopBarPromptAnchor();
-    const fixerLabel = toggle.querySelector('.elm-mf-switch-label');
-    if (!nativeLabel || !fixerLabel) return;
-
-    const nativeStyle = getComputedStyle(nativeLabel);
-    ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing'].forEach((property) => {
-      if (fixerLabel.style[property] !== nativeStyle[property]) {
-        fixerLabel.style[property] = nativeStyle[property];
-      }
-    });
   }
 
-  function findTopBarPromptGroup(anchor) {
-    const anchorRect = anchor.getBoundingClientRect();
-    let node = anchor.parentElement;
-
-    for (let depth = 0; node && node !== document.body && depth < 6; depth++) {
-      const rect = node.getBoundingClientRect();
-      const isSmallHeaderGroup = rect.height <= 80 && rect.width <= 340;
-      const hasNearbyControl = Array.from(
-        node.querySelectorAll('button, [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
-      ).some((control) => {
-        if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
-        const controlRect = control.getBoundingClientRect();
-        return Math.abs(controlRect.top - anchorRect.top) < 48 && Math.abs(controlRect.left - anchorRect.left) < 220;
-      });
-
-      if (isVisible(node) && isSmallHeaderGroup && hasNearbyControl) return node;
-      node = node.parentElement;
-    }
-
-    return null;
-  }
-
-  function createTryNewLookGroup(anchor) {
-    const control = findNearbyTryNewLookControl(anchor);
-    if (!control || control.parentElement !== anchor.parentElement || !anchor.parentElement) return anchor;
-
-    const parent = anchor.parentElement;
-    const wrapper = document.createElement('span');
-    wrapper.className = 'elm-mf-try-new-look-group';
-
-    const anchorRect = anchor.getBoundingClientRect();
-    const controlRect = control.getBoundingClientRect();
-    const first = anchorRect.left <= controlRect.left ? anchor : control;
-    const second = first === anchor ? control : anchor;
-
-    parent.insertBefore(wrapper, first);
-    wrapper.appendChild(first);
-    wrapper.appendChild(second);
-    return wrapper;
+  // The chat input bar at the bottom of the viewport (and any other bottom
+  // docked controls) must never be treated as top bar anchors: its top edge
+  // always sits within ~100px of the bottom, i.e. beyond 70% of a realistic
+  // viewport height, while a banner plus the top bar below it always fit
+  // within the top 70%.
+  function isInTopBarRegion(rect) {
+    return rect.top >= 0 && rect.top < window.innerHeight * 0.7;
   }
 
   // A banner above the top bar pushes the top bar down and adds its own
@@ -515,7 +311,7 @@
     ).filter((control) => {
       if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
       const rect = control.getBoundingClientRect();
-      return rect.top >= 0 && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38;
+      return isInTopBarRegion(rect) && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38;
     });
     if (candidates.length === 0) return [];
 
@@ -531,7 +327,17 @@
     for (const band of bands) {
       if (band.controls.length > topBarBand.controls.length) topBarBand = band;
     }
+    // A lone banner control (e.g. its dismiss button) must never be treated as
+    // a top bar anchor; without at least two controls, fall back to compact
+    // positioning instead.
+    if (topBarBand.controls.length < 2) return [];
     return topBarBand.controls;
+  }
+
+  function getLeftmostTopBarControl() {
+    return getVisibleTopBarControls()
+      .slice()
+      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)[0] || null;
   }
 
   // Remember the last known top bar anchor (control + position). While a
@@ -636,10 +442,7 @@
     button.classList.add('elm-mf-fallback');
     button.classList.add('elm-mf-compact');
 
-    const controls = getVisibleTopBarControls();
-    const leftmost = controls
-      .slice()
-      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)[0];
+    const leftmost = getLeftmostTopBarControl();
 
     if (!leftmost) {
       button.style.left = `${Math.max(8, window.innerWidth - 132)}px`;
@@ -710,78 +513,6 @@
     return { commonParent, promptsItem, modelGuideItem, promptsLabel };
   }
 
-  function findLegacyTextLabel(text, startsWith = false) {
-    return Array.from(document.querySelectorAll('button, a, span, div, p'))
-      .filter((node) => {
-        if (node.closest?.(`#${PROMPT_BUTTON_ID}, #${PROMPT_PANEL_ID}`) || !isVisible(node)) return false;
-        const content = (node.textContent || '').trim();
-        if (startsWith ? !content.startsWith(text) : content !== text) return false;
-        const rect = node.getBoundingClientRect();
-        return rect.left >= 0 && rect.left < Math.min(620, window.innerWidth * 0.4) &&
-          rect.top >= 70 && rect.top < window.innerHeight;
-      })
-      .sort((a, b) => a.children.length - b.children.length)[0] || null;
-  }
-
-  function findLegacyControl(text) {
-    const label = findLegacyTextLabel(text);
-    if (!label) return null;
-    const control = label.closest('button, a, [role="button"]') || label;
-    return isVisible(control) ? control : null;
-  }
-
-  function findLegacyPromptTabControl() {
-    const label = findLegacyTextLabel('Prompts');
-    if (!label) return null;
-    const control = label.closest('button, a, [role="tab"], [role="button"]') || label;
-    return isVisible(control) ? control : null;
-  }
-
-  function isLegacyLayout() {
-    return Boolean(
-      findLegacyTextLabel('History') &&
-      findLegacyTextLabel('Documents') &&
-      findLegacyPromptTabControl()
-    );
-  }
-
-  function lowestCommonAncestor(first, second) {
-    const ancestors = new Set();
-    let node = first;
-    while (node) {
-      ancestors.add(node);
-      node = node.parentElement;
-    }
-
-    node = second;
-    while (node && !ancestors.has(node)) node = node.parentElement;
-    return node || null;
-  }
-
-  function findLegacyPromptMount() {
-    const promptTab = findLegacyTextLabel('Prompts');
-    const helpText = findLegacyTextLabel('Select your prompt to change or refine how ELM replies.', true);
-    const addControl = findLegacyControl('Add Prompt');
-    const editControl = findLegacyControl('Edit');
-    const deleteControl = findLegacyControl('Delete');
-    if (!promptTab || !helpText || !addControl || !editControl || !deleteControl) return null;
-
-    const actionsGroup = lowestCommonAncestor(editControl, deleteControl);
-    if (!actionsGroup || actionsGroup === document.body || !actionsGroup.parentElement) return null;
-
-    const groupRect = actionsGroup.getBoundingClientRect();
-    const parentRect = actionsGroup.parentElement.getBoundingClientRect();
-    if (groupRect.height > 140 || parentRect.left > 80 || parentRect.right > Math.min(700, window.innerWidth * 0.46)) {
-      return null;
-    }
-
-    return {
-      parent: actionsGroup.parentElement,
-      after: actionsGroup,
-      addControl
-    };
-  }
-
   function findSidebarItemIcon(item, label) {
     const labelRect = label.getBoundingClientRect();
     return Array.from(item.querySelectorAll('*'))
@@ -824,39 +555,8 @@
     }
   }
 
-  function applyLegacyPromptStyle(button, mount) {
-    const parentRect = mount.parent.getBoundingClientRect();
-    const parentStyle = getComputedStyle(mount.parent);
-    const addRect = mount.addControl.getBoundingClientRect();
-    const addStyle = getComputedStyle(mount.addControl);
-    const launcherIcon = button.querySelector('.elm-mf-launcher-icon');
-
-    button.style.height = `${addRect.height}px`;
-    button.style.minHeight = `${addRect.height}px`;
-    button.style.width = `${addRect.width}px`;
-    button.style.marginTop = '16px';
-    button.style.marginRight = '0';
-    button.style.marginBottom = '0';
-    const parentContentLeft = parentRect.left +
-      (Number.parseFloat(parentStyle.borderLeftWidth) || 0) +
-      (Number.parseFloat(parentStyle.paddingLeft) || 0);
-    button.style.marginLeft = `${Math.max(0, addRect.left - parentContentLeft)}px`;
-    button.style.borderRadius = addStyle.borderRadius;
-    button.style.fontFamily = addStyle.fontFamily;
-    button.style.fontSize = addStyle.fontSize;
-    button.style.fontWeight = addStyle.fontWeight;
-    button.style.lineHeight = addStyle.lineHeight;
-    button.style.letterSpacing = addStyle.letterSpacing;
-    button.style.gap = '10px';
-
-    if (launcherIcon) {
-      launcherIcon.style.width = '22px';
-      launcherIcon.style.height = '22px';
-    }
-  }
-
   function clearSidebarPromptStyle(button) {
-    button.classList.remove('elm-mf-sidebar', 'elm-mf-legacy-sidebar', 'elm-mf-hidden');
+    button.classList.remove('elm-mf-sidebar', 'elm-mf-hidden');
     [
       'height', 'min-height', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
       'border-radius', 'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
@@ -870,7 +570,6 @@
 
   function placePromptButton(button) {
     const sidebarMount = findSidebarPromptMount();
-    const legacyMount = sidebarMount ? null : findLegacyPromptMount();
     clearSidebarPromptStyle(button);
 
     if (sidebarMount) {
@@ -884,20 +583,6 @@
         sidebarMount.commonParent.insertBefore(button, sidebarMount.modelGuideItem);
       }
       applySidebarPromptStyle(button, sidebarMount);
-      return;
-    }
-
-    if (legacyMount) {
-      button.classList.remove('elm-mf-fallback', 'elm-mf-compact');
-      button.classList.add('elm-mf-legacy-sidebar');
-      button.style.left = '';
-      button.style.top = '';
-      button.style.right = '';
-      button.style.bottom = '';
-      if (button.parentElement !== legacyMount.parent || button.previousElementSibling !== legacyMount.after) {
-        legacyMount.parent.insertBefore(button, legacyMount.after.nextSibling);
-      }
-      applyLegacyPromptStyle(button, legacyMount);
       return;
     }
 
@@ -929,9 +614,7 @@
     if (toggle.parentElement !== document.body) document.body.appendChild(toggle);
     toggle.classList.add('elm-mf-fallback', 'elm-mf-compact');
 
-    const leftmost = getVisibleTopBarControls()
-      .slice()
-      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)[0];
+    const leftmost = getLeftmostTopBarControl();
     const size = 42;
     const gap = 14;
 
@@ -951,25 +634,19 @@
   }
 
   function placeFixerToggle(toggle) {
-    const tryNewLook = findTopBarPromptAnchor();
-    if (tryNewLook?.parentElement) {
-      const promptGroup = findTopBarPromptGroup(tryNewLook) || createTryNewLookGroup(tryNewLook);
-      const interactiveAncestor = promptGroup.closest(
-        'label, button, [role="switch"], mat-slide-toggle, .mat-slide-toggle'
-      );
-      const insertionTarget = interactiveAncestor || promptGroup;
-      const parent = insertionTarget.parentElement;
-      if (parent) {
-        toggle.classList.remove('elm-mf-fallback', 'elm-mf-compact');
-        toggle.style.left = '';
-        toggle.style.top = '';
-        toggle.style.right = '';
-        toggle.style.bottom = '';
-        if (toggle.parentElement !== parent || toggle.nextSibling !== insertionTarget) {
-          parent.insertBefore(toggle, insertionTarget);
-        }
-        return;
+    const leftmost = getLeftmostTopBarControl();
+    const leftmostRect = leftmost?.getBoundingClientRect();
+    if (leftmostRect && isInTopBarRegion(leftmostRect) && !isAnchorCoveredByOverlay(leftmostRect)) {
+      toggle.classList.remove('elm-mf-fallback', 'elm-mf-compact');
+      toggle.style.left = '';
+      toggle.style.top = '';
+      toggle.style.right = '';
+      toggle.style.bottom = '';
+      const parent = leftmost.parentElement;
+      if (toggle.parentElement !== parent || toggle.nextSibling !== leftmost) {
+        parent.insertBefore(toggle, leftmost);
       }
+      return;
     }
 
     positionCompactFixerToggle(toggle);
@@ -1046,7 +723,7 @@
     const panelWidth = Math.min(420, window.innerWidth - 32);
     const estimatedHeight = Math.min(520, panel.scrollHeight || 420);
 
-    if (button.classList.contains('elm-mf-sidebar') || button.classList.contains('elm-mf-legacy-sidebar')) {
+    if (button.classList.contains('elm-mf-sidebar')) {
       const left = Math.max(16, Math.min(rect.right + margin, window.innerWidth - panelWidth - 16));
       const top = Math.max(16, Math.min(rect.top, window.innerHeight - estimatedHeight - 16));
       panel.style.left = `${left}px`;
@@ -1146,9 +823,7 @@
 
   function ensurePromptLauncher() {
     if (!document.body) return;
-    const hasElmChatUi = findTopBarPromptAnchor() ||
-      document.querySelector(CONTAINER_SELECTOR) ||
-      findLegacyTextLabel('Prompts') ||
+    const hasElmChatUi = document.querySelector(CONTAINER_SELECTOR) ||
       findSidebarLabel('Prompts');
     if (!hasElmChatUi) return;
 

@@ -86,35 +86,6 @@ markdown.elm-math-rescued-container,
   display: inline;
 }
 
-#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar {
-  align-items: center;
-  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 8%, white);
-  border: 1px solid var(--elm-mf-accent, #2f6f59);
-  border-radius: 8px;
-  box-sizing: border-box;
-  box-shadow: none;
-  color: var(--elm-mf-accent, #2f6f59);
-  display: flex;
-  justify-content: center;
-  position: static;
-  text-align: center;
-  z-index: auto;
-}
-
-#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar:hover {
-  background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 16%, white);
-  border-color: var(--elm-mf-accent, #2f6f59);
-}
-
-#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar.elm-mf-attention {
-  animation: elm-mf-sidebar-pulse 1.4s ease-in-out infinite;
-}
-
-#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar .elm-mf-launcher-icon,
-#elm-math-fixer-prompt-button.elm-mf-legacy-sidebar .elm-mf-launcher-label {
-  display: inline-flex;
-}
-
 #elm-math-fixer-prompt-button.elm-mf-hidden {
   display: none !important;
 }
@@ -333,14 +304,6 @@ markdown.elm-math-rescued-container,
 
 #elm-math-fixer-prompt-button.elm-mf-compact .elm-mf-launcher-label {
   display: none;
-}
-
-.elm-mf-try-new-look-group {
-  align-items: center;
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 8px;
-  white-space: nowrap;
 }
 
 @keyframes elm-mf-pulse {
