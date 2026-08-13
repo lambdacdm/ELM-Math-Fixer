@@ -295,7 +295,8 @@
       const endAnchor = bridgeAnchor(previousRun.nodes[previousRun.nodes.length - 1]);
       const startAnchor = bridgeAnchor(run.nodes[0]);
       if (!endAnchor || endAnchor.nextSibling !== startAnchor) {
-        currentGroup = null;
+        currentGroup = { runs: [run] };
+        groups.push(currentGroup);
         continue;
       }
       currentGroup.runs.push(run);
