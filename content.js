@@ -41,6 +41,16 @@
   if (!MATH_REPAIR) throw new Error('ELM Math Fixer repair engine failed to load.');
   const { restoreAllRescuedMath } = MATH_REPAIR;
 
+  // Per-tick memoization: ensurePromptLauncher clears this at entry and every
+  // helper below reuses its results for the rest of the synchronous tick (the
+  // DOM cannot change mid-tick, so the memo is exact). Cleared afterwards so
+  // any future out-of-tick caller recomputes against fresh layout.
+  let uiTickCache = null;
+  // The accent color is purely cosmetic and rarely changes; recompute at most
+  // once every 2s to keep getComputedStyle sweeps off the hot path.
+  const ACCENT_COLOR_THROTTLE_MS = 2000;
+  let accentColorCache = { color: null, at: 0 };
+
   function isVisible(el) {
     const rect = el.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0;
@@ -63,6 +73,14 @@
   }
 
   function readElmAccentColor() {
+    const now = Date.now();
+    if (now - accentColorCache.at < ACCENT_COLOR_THROTTLE_MS) return accentColorCache.color;
+    const color = readElmAccentColorUncached();
+    accentColorCache = { color, at: now };
+    return color;
+  }
+
+  function readElmAccentColorUncached() {
     const roots = getVisibleTopBarControls();
     let best = null;
 
@@ -114,6 +132,13 @@
   // edge belong to the composer row and must never anchor top bar placement,
   // even when the welcome page centers the composer unusually high.
   function getChatInputRect() {
+    if (uiTickCache && 'chatInputRect' in uiTickCache) return uiTickCache.chatInputRect;
+    const rect = getChatInputRectUncached();
+    if (uiTickCache) uiTickCache.chatInputRect = rect;
+    return rect;
+  }
+
+  function getChatInputRectUncached() {
     const inputs = document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable=""]');
     for (const input of inputs) {
       const rect = input.getBoundingClientRect();
@@ -137,6 +162,13 @@
   // without one, fall back to the row with the most controls (banner rows
   // usually hold one or two controls, the top bar holds more).
   function getVisibleTopBarControls() {
+    if (uiTickCache?.topBarControls) return uiTickCache.topBarControls;
+    const controls = getVisibleTopBarControlsUncached();
+    if (uiTickCache) uiTickCache.topBarControls = controls;
+    return controls;
+  }
+
+  function getVisibleTopBarControlsUncached() {
     const composerRect = getChatInputRect();
     const candidates = Array.from(
       document.querySelectorAll('button, a, [role="button"], [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
@@ -325,6 +357,16 @@
   }
 
   function findSidebarLabel(text) {
+    if (uiTickCache?.sidebarLabels?.has(text)) return uiTickCache.sidebarLabels.get(text);
+    const label = findSidebarLabelUncached(text);
+    if (uiTickCache) {
+      if (!uiTickCache.sidebarLabels) uiTickCache.sidebarLabels = new Map();
+      uiTickCache.sidebarLabels.set(text, label);
+    }
+    return label;
+  }
+
+  function findSidebarLabelUncached(text) {
     const maxLeft = Math.min(620, window.innerWidth * 0.4);
     return Array.from(document.querySelectorAll('a, button, span, div, p'))
       .filter((node) => {
@@ -685,6 +727,15 @@
 
   function ensurePromptLauncher() {
     if (!document.body) return;
+    uiTickCache = {};
+    try {
+      ensurePromptLauncherUncached();
+    } finally {
+      uiTickCache = null;
+    }
+  }
+
+  function ensurePromptLauncherUncached() {
     const hasElmChatUi = document.querySelector(CONTAINER_SELECTOR) ||
       findSidebarLabel('Prompts') ||
       getChatInputRect();

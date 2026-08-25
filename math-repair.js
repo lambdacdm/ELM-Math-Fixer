@@ -872,6 +872,11 @@
 
   function getMathAwareText(el, assumeMath = false) {
     if (el.nodeType === Node.TEXT_NODE) return el.nodeValue || '';
+    // Without math markers the math-aware clone is an untouched deep clone,
+    // so the live textContent is identical and skips the cloneNode entirely.
+    // (Eaten-delimiter repairs operate on elements WITHOUT math markers too,
+    // but they only need this same text — the skip below stays transparent.)
+    if (!assumeMath && !hasMath(el.textContent || '')) return el.textContent || '';
     if (assumeMath) {
       const cached = getMathTextCache.get(el);
       if (cached !== undefined) return cached;

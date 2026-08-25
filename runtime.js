@@ -197,4 +197,22 @@
   log('runtime module loaded');
   scan();
   observePage();
+
+  // The Fixer UI is normally created by the first mutation-driven scan, but a
+  // quiet SPA bootstrap (network wait, framework init) can delay that by
+  // seconds. Poll briefly until both toolbar controls exist so the switch
+  // appears as soon as ELM renders its composer/container. Each poll is the
+  // same idempotent scan(); it stops early once the controls exist.
+  let startupPollCount = 0;
+  const startupPollTimer = setInterval(() => {
+    const ready =
+      document.getElementById(UI.promptButtonId) &&
+      document.getElementById(UI.fixerToggleId);
+    if (ready || startupPollCount >= 40) {
+      clearInterval(startupPollTimer);
+      return;
+    }
+    startupPollCount++;
+    scan();
+  }, 300);
 })();
