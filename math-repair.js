@@ -200,10 +200,14 @@
   // A Markdown emphasis element can span two broken inline formulas at once:
   // the `_..._` pair wraps `[part of $A$][prose][part of $B$]`, so one `<em>`
   // element contains the closing `$` of one formula and the opening `$` of the
-  // next. Normalize such elements back into flat text with `_` markers at the
-  // formula boundaries, but only after the reconstructed runs validate.
-  // Genuine prose emphasis never crosses an odd number of unpaired `$` tokens,
-  // so the parity gate plus the dry-run validation keep it untouched.
+  // next. It can also span from inside a display `$$...$$` body into prose
+  // (e.g. `per<em>{p,v}(b_i)=0\n$$\nwas found with </em>`), swallowing the
+  // closing delimiter. Normalize such elements back into flat text with `_`
+  // markers at the math boundaries (symmetric for crossing, asymmetric for
+  // spanning), but only after the reconstructed runs validate.
+  // Genuine prose emphasis never crosses an odd number of unpaired `$` tokens
+  // and never has one endpoint inside a math body, so the parity gate plus the
+  // dry-run validation keep it untouched.
   function normalizeCrossingEmphasis(el, ignoredSelector) {
     const emphasisSelector = 'em, i';
     const topEms = Array.from(el.querySelectorAll(emphasisSelector)).filter(
@@ -220,28 +224,81 @@
       const start = getNodeTextOffset(el, em);
       if (openAt(start) && openAt(start + emText.length)) crossingIndices.push(index);
     });
-    if (crossingIndices.length === 0) return;
 
-    const clone = el.cloneNode(true);
-    const cloneTopEms = Array.from(clone.querySelectorAll(emphasisSelector)).filter(
-      (node) => !node.parentElement?.closest(emphasisSelector)
-    );
-    if (cloneTopEms.length !== topEms.length) return;
-
-    crossingIndices.forEach((index) => unwrapCrossingEmphasis(cloneTopEms[index]));
-    const runs = getTextRuns(clone, ignoredSelector);
-    for (const run of runs) {
-      if (!run.text.includes('_') || !run.text.includes('$')) continue;
-      if (!validateMixedRunText(run.text)) return;
+    // Spanning: exactly one endpoint inside a math body (display or inline)
+    // and the em text itself contains math delimiters. Use asymmetric markers:
+    // leading `_` only if start is in a body, trailing `_` only if end is.
+    const mathRanges = getMathBodyRanges(fullText);
+    const spanningIndices = [];
+    if (mathRanges.length > 0) {
+      topEms.forEach((em, index) => {
+        if (crossingIndices.includes(index)) return;
+        const emText = em.textContent || '';
+        if (!hasMath(emText)) return;
+        const start = getNodeTextOffset(el, em);
+        const end = start + emText.length;
+        const startInBody = mathRanges.some((r) => start >= r.start && start < r.end);
+        const endInBody = mathRanges.some((r) => end > r.start && end <= r.end);
+        if ((startInBody || endInBody) && !(startInBody && endInBody)) {
+          spanningIndices.push(index);
+        }
+      });
     }
 
-    crossingIndices.forEach((index) => unwrapCrossingEmphasis(topEms[index]));
+    if (crossingIndices.length === 0 && spanningIndices.length === 0) return;
+
+    // Try standard `_` markers first; if validation fails, retry with `}_`
+    // for spanning nodes (Markdown can eat the closing `}` of
+    // `\operatorname{per}_{p,v}` together with the `_` pair).
+    const tryApply = (braceRestore) => {
+      const clone = el.cloneNode(true);
+      const cloneTopEms = Array.from(clone.querySelectorAll(emphasisSelector)).filter(
+        (node) => !node.parentElement?.closest(emphasisSelector)
+      );
+      if (cloneTopEms.length !== topEms.length) return false;
+
+      crossingIndices.forEach((index) => unwrapCrossingEmphasis(cloneTopEms[index]));
+      spanningIndices.forEach((index) => {
+        const em = cloneTopEms[index];
+        const start = getNodeTextOffset(clone, em);
+        const end = start + (em.textContent || '').length;
+        const sIn = mathRanges.some((r) => start >= r.start && start < r.end);
+        const eIn = mathRanges.some((r) => end > r.start && end <= r.end);
+        unwrapSpanningEmphasis(em, sIn, eIn, braceRestore);
+      });
+      const runs = getTextRuns(clone, ignoredSelector);
+      for (const run of runs) {
+        if (!run.text.includes('_') || !run.text.includes('$')) continue;
+        if (!validateMixedRunText(run.text)) return false;
+      }
+
+      crossingIndices.forEach((index) => unwrapCrossingEmphasis(topEms[index]));
+      spanningIndices.forEach((index) => {
+        const em = topEms[index];
+        const start = getNodeTextOffset(el, em);
+        const end = start + (em.textContent || '').length;
+        const sIn = mathRanges.some((r) => start >= r.start && start < r.end);
+        const eIn = mathRanges.some((r) => end > r.start && end <= r.end);
+        unwrapSpanningEmphasis(em, sIn, eIn, braceRestore);
+      });
+      return true;
+    };
+
+    if (!tryApply(false)) {
+      if (spanningIndices.length > 0) tryApply(true);
+    }
   }
 
   function unwrapCrossingEmphasis(em) {
     const marker = document.createTextNode('_');
     em.before(marker.cloneNode(false));
     em.after(marker.cloneNode(false));
+    em.replaceWith(...Array.from(em.childNodes));
+  }
+
+  function unwrapSpanningEmphasis(em, leading, trailing, braceRestore = false) {
+    if (leading) em.before(document.createTextNode(braceRestore ? `}_` : '_'));
+    if (trailing) em.after(document.createTextNode('_'));
     em.replaceWith(...Array.from(em.childNodes));
   }
 
@@ -705,9 +762,24 @@
       return { node, start, end: start + (node.textContent || '').length };
     });
 
-    const mathNodes = positionedNodes.filter(({ start, end }) =>
-      mathRanges.some((mathRange) => start > mathRange.start && end < mathRange.end)
+    const containedNodes = positionedNodes.filter(({ start, end }) =>
+      mathRanges.some((mathRange) => start >= mathRange.start && end <= mathRange.end)
     );
+    const crossingNodes = positionedNodes.filter(
+      ({ start, end }) =>
+        !mathRanges.some((mathRange) => start >= mathRange.start && end <= mathRange.end) &&
+        mathRanges.some((mathRange) => start >= mathRange.start && start < mathRange.end) &&
+        mathRanges.some((mathRange) => end > mathRange.start && end <= mathRange.end)
+    );
+    const spanningNodes = positionedNodes.filter(
+      ({ start, end, node }) =>
+        !mathRanges.some((mathRange) => start >= mathRange.start && end <= mathRange.end) &&
+        !crossingNodes.some((n) => n.node === node) &&
+        (mathRanges.some((mathRange) => start >= mathRange.start && start < mathRange.end) ||
+          mathRanges.some((mathRange) => end > mathRange.start && end <= mathRange.end)) &&
+        hasMath(node.textContent || '')
+    );
+    const mathNodes = [...containedNodes, ...crossingNodes, ...spanningNodes];
     if (mathNodes.length === 0) return clone;
 
     const candidateSets = [['_', '__'], ['*', '**'], ['', '']];
@@ -716,14 +788,64 @@
       const trialNodes = Array.from(trial.querySelectorAll('em, i, strong, b')).filter(
         (node) => !node.parentElement?.closest('em, i, strong, b')
       );
-      trialNodes.forEach((node) => {
+      trialNodes.forEach((node, idx) => {
+        const pn = positionedNodes[idx];
+        const isMathNode = pn && mathNodes.some((mn) => mn.node === pn.node);
+        if (!isMathNode) return;
         const isStrong = node.matches('strong, b');
         const marker = isStrong ? strongMarker : emMarker;
+        const startInBody = mathRanges.some((r) => pn.start >= r.start && pn.start < r.end);
+        const endInBody = mathRanges.some((r) => pn.end > r.start && pn.end <= r.end);
+        const leading = startInBody ? marker : '';
+        const trailing = endInBody ? marker : '';
         const text = node.textContent || '';
-        node.replaceWith(document.createTextNode(`${marker}${text}${marker}`));
+        node.replaceWith(document.createTextNode(`${leading}${text}${trailing}`));
       });
       trial.normalize();
-      let validationText = trial.textContent || '';
+      let validationText = normalizeMathDelimiterWhitespace(trial.textContent || '');
+      if (assumeMath) {
+        const open = validationText.startsWith('$$');
+        const close = validationText.endsWith('$$');
+        if (!open && close) validationText = '$$' + validationText;
+        else if (open && !close) validationText = validationText + '$$';
+        else if (!open && !close) validationText = '$$' + validationText + '$$';
+      }
+      if (isSafeMixedTextMath(validationText)) {
+        return trial;
+      }
+    }
+
+    // Additional trial for spanning nodes: Markdown can eat the closing `}` of
+    // `\operatorname{per}_{p,v}` together with the `_` pair, leaving
+    // `\operatorname{per<em>{p,v}...`. Inserting `_` alone gives unbalanced
+    // braces. Try `}` + marker to restore `\operatorname{per}_{p,v}...`.
+    if (spanningNodes.length > 0) {
+      const trial = clone.cloneNode(true);
+      const trialNodes = Array.from(trial.querySelectorAll('em, i, strong, b')).filter(
+        (node) => !node.parentElement?.closest('em, i, strong, b')
+      );
+      trialNodes.forEach((node, idx) => {
+        const pn = positionedNodes[idx];
+        const isSpanning = pn && spanningNodes.some((mn) => mn.node === pn.node);
+        if (!isSpanning) {
+          const isMath = pn && mathNodes.some((mn) => mn.node === pn.node);
+          if (!isMath || !containedNodes.some((mn) => mn.node === pn.node)) return;
+          const m = node.matches('strong, b') ? '__' : '_';
+          const sIn = mathRanges.some((r) => pn.start >= r.start && pn.start < r.end);
+          const eIn = mathRanges.some((r) => pn.end > r.start && pn.end <= r.end);
+          node.replaceWith(document.createTextNode(`${sIn ? m : ''}${node.textContent || ''}${eIn ? m : ''}`));
+          return;
+        }
+        const marker = node.matches('strong, b') ? '__' : '_';
+        const startInBody = mathRanges.some((r) => pn.start >= r.start && pn.start < r.end);
+        const endInBody = mathRanges.some((r) => pn.end > r.start && pn.end <= r.end);
+        const leading = startInBody ? `}${marker}` : marker;
+        const trailing = endInBody ? marker : '';
+        const text = node.textContent || '';
+        node.replaceWith(document.createTextNode(`${leading}${text}${trailing}`));
+      });
+      trial.normalize();
+      let validationText = normalizeMathDelimiterWhitespace(trial.textContent || '');
       if (assumeMath) {
         const open = validationText.startsWith('$$');
         const close = validationText.endsWith('$$');
@@ -738,7 +860,9 @@
 
     // All marker candidates failed validation; use the default reconstruction
     // (underscore) which preserves the historical subscript behavior.
-    mathNodes.forEach(({ node }) => {
+    // Crossing/spanning nodes are intentionally excluded from the fallback — if no
+    // marker set validated, a crossing unwrap would corrupt prose.
+    containedNodes.forEach(({ node }) => {
       const marker = node.matches('strong, b') ? '__' : '_';
       node.replaceWith(document.createTextNode(`${marker}${node.textContent}${marker}`));
     });
@@ -1127,6 +1251,8 @@
   }
 
   function cleanMathClone(clone) {
+    clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')));
+
     const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
     const textNodes = [];
     let node;
@@ -1150,6 +1276,7 @@
 
   function hasAcceptableMathResult(root) {
     if (hasBlockingKatexError(root)) return false;
+    if ([...root.querySelectorAll('.katex-mathml annotation')].some((node) => !(node.textContent || '').trim())) return false;
     return Boolean(root.querySelector('.katex')) || root.querySelectorAll('.katex-error').length > 0;
   }
 
@@ -1533,9 +1660,7 @@
       const wrapper = el.querySelector(':scope > .elm-math-rescued-wrapper');
       let text = hiddenOriginal
         ? getMathAwareText(hiddenOriginal)
-        : false
-          ? getMathAwareTextExcludingRendered(el)
-          : getMathAwareText(el);
+        : getMathAwareText(el);
       const { delimiters: delimiterCount, dollars: dollarCount, brackets: bracketCount } = countMathDelimiters(text);
 
       if (
@@ -1718,9 +1843,15 @@
           continue;
         }
 
-        if (wrapper && wrapper.dataset.rawText === cleanedText) {
-          i++;
-          continue;
+        if (wrapper) {
+          const rawText = wrapper.dataset.rawText || '';
+          const normalizedRaw = rawText.includes('\n')
+            ? flattenSplitInlineMath(normalizeMathDelimiterWhitespace(rawText))
+            : normalizeMathDelimiterWhitespace(rawText);
+          if (normalizedRaw === cleanedText) {
+            i++;
+            continue;
+          }
         }
 
         if (hiddenOriginal) {

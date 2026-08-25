@@ -1,16 +1,18 @@
-# ELM Math Fixer v1.3.9
+# ELM Math Fixer v1.3.10
 
-## What's New since v1.3.8
+## What's New since v1.3.9
 
 ### Bug fixes
-- **Fixer switch always docks in the top bar row** (v1.3.9): the top bar row is now identified by known ELM top bar labels (e.g. "Request an ELM API Key"), so the chat composer can never win the anchor vote - not even on the welcome screen of a tall viewport, where the centered composer row previously out-voted the top bar and swallowed the switch.
-- **Fixer switch is covered by menus instead of fleeing them** (v1.3.9): when an overlay such as the model picker menu covers part of the top bar, the switch stays docked and is hidden naturally like ELM's own controls, instead of turning into a floating compact icon anchored to menu items. It returns to its slot when the menu closes.
-- **Fixer switch now appears on the welcome page** (v1.3.9): the switch (and the prompt launcher) are created as soon as the chat composer is present, so the fixer can be toggled before the first message is sent; the prompt launcher still hides itself until the sidebar is available.
-- **Top bar region tightened** (v1.3.9): candidate controls must now sit within the top half of the viewport, and controls at or below the composer input are excluded from anchoring outright.
+- **Math rendering: flush and spanning emphasis** (v1.3.10): `getMathAwareClone` now treats `$<em>x</em>$`-style flush boundaries as math (previously required strict interior), restoring `pmatrix` cell subscripts that were left as `<em>`.
+- **Math rendering: display↔inline and display↔prose spanning** (v1.3.10): an `<em>` that starts inside a display `$$...$$` body and ends in prose (or vice versa, e.g. `per<em>{p,v}(b_i)=0\n$$\nwas found with </em>`) is now detected via body-range analysis with asymmetric `_` markers and a dry-run `isSafeMixedTextMath` gate. The fallback underscore path now applies only to fully-contained ems, so prose is never polluted. This fixes `per_{p,v}` and `\|c\|_{\infty}`-style subscripts that span a math delimiter.
+- **Math rendering: brace recovery for `\operatorname`** (v1.3.10): when Markdown eats the closing `}` of `\operatorname{per}_{p,v}` together with the `_` pair, the spanning trial now retries with `}_{p,v}` (inserting the missing `}`) so `isSafeMixedTextMath` validates and the display `$$\sum_i c_i\operatorname{per}_{p,v}(b_i)=0$$` renders.
+- **Math rendering: `<br>`-split display** (v1.3.10): `cleanMathClone` converts every `<br>` to `\n` before delimiter pairing, so `$$<br>\operatorname{per}_{p,v}…<br>$$` inside a `<blockquote><p>` (e.g. the user's blockquote) is now recognised as a single `$$...$$` display and rendered.
+- **Math rendering: empty display guard** (v1.3.10): `hasAcceptableMathResult` now rejects a `.katex` result whose `annotation` is empty/whitespace, preventing a stray `$$` split across nodes from being committed as an empty display.
+- **Math rendering: idempotency guard** (v1.3.10): `processContainer` now compares `normalizeMathDelimiterWhitespace(flattenSplitInlineMath(rawText))` against `cleanedText`, so a `<br>`-inside-math display no longer ping-pongs between `rawText` (per-node trim) and `cleanedText` (whole-string trim) every 180ms — fixing the observed selection-clearing / Elements-panel flashing.
 
-### Removed
-- **Onboarding guide bubble removed** (v1.3.9): the "Fixer Prompts is inside Tools" hint bubble and the attention pulse are gone. Fixer Prompts is an auxiliary feature; users who need it will find it in Tools.
+### Tests
+- Added `td-flush-em`, `crossing-display-inline` (`x_{p,v}`/`a_{K,S}`), `crossing-real-operator` (`\operatorname{per}_{p,v}`), `br-display` (blockquote `$$<br>…<br>$$`), `br-prose` (prose `<br>` + inline `$x$`), and `spanning-display-prose` / `spanning-local-chain` (display→prose spanning + local-chain) fixtures. Empty-display and stability (700ms) assertions added.
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.3.9.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.3.10.zip`.

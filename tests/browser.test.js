@@ -333,8 +333,16 @@ $$
         <table><tbody>
           <tr><td id="td-em-backslash"></td></tr>
           <tr><td id="td-em-amp"></td></tr>
+          <tr><td id="td-flush-em"></td></tr>
         </tbody></table>
       </section>
+      <section class="markdown" id="crossing-display-inline-case"></section>
+      <section class="markdown" id="crossing-prose-negative-case"></section>
+      <section class="markdown" id="crossing-real-operator-case"></section>
+      <section class="markdown" id="br-display-case"><blockquote><p id="br-display-p">把无限维的猜想<br>$$<br>\\operatorname{per}_{p,v}:\\mathcal O(U^{MT})\\to K_v<br>$$<br>的 injectivity，改成有限问题</p></blockquote></section>
+      <section class="markdown" id="br-prose-case"><p id="br-prose-p">Line one<br>Line two with $x$ math</p></section>
+      <section class="markdown" id="spanning-display-prose-case"><p>No nonzero relation<br>$$<br>x<em>{p,v}: y\n$$<br>was found with </em>test $x$.</p></section>
+      <section class="markdown" id="spanning-local-chain-case"></section>
       <section class="markdown" id="code-block-escape-case">
         <pre><code class="language-latex">\\\\[ \\\\frac{\\\\zeta_8^i-1}{\\\\zeta_8^j-1},\\\\qquad 1\\\\leq i\\\\ne j<8, \\\\]</code></pre>
       </section>
@@ -412,6 +420,43 @@ For the depth-one basis, one has
     };
     fillCell('td-em-backslash', '\\begin{pmatrix}1&', '\\\\0&', '\\end{pmatrix} $');
     fillCell('td-em-amp', '\\begin{pmatrix}', '&', '\\\\0&*\\end{pmatrix} $');
+    {
+      const flush = document.getElementById('td-flush-em');
+      flush.textContent = '$';
+      const em = document.createElement('em');
+      em.textContent = 'x';
+      flush.appendChild(em);
+      flush.appendChild(document.createTextNode('$'));
+    }
+    {
+      const crossing = document.getElementById('crossing-display-inline-case');
+      const p = document.createElement('p');
+      p.id = 'cross-display-inline';
+      p.innerHTML = 'There tests $$ x<em>{p,v}: y\n$$\nfor group over $ a</em>{K,S} $. After.';
+      crossing.appendChild(p);
+    }
+    {
+      const real = document.getElementById('crossing-real-operator-case');
+      const p = document.createElement('p');
+      p.id = 'cross-real-operator';
+      p.innerHTML = 'There tests $$ \\operatorname{per<em>{p,v}:\\mathcal O(U^{MT})\\to K_v\n$$\nfor group over $ \\mathcal O</em>{K,S} $. After.';
+      real.appendChild(p);
+    }
+    {
+      const prose = document.getElementById('crossing-prose-negative-case');
+      const p = document.createElement('p');
+      p.id = 'cross-prose-negative';
+      p.innerHTML = 'At start <em>see $x$ notation</em> after.';
+      prose.appendChild(p);
+    }
+    {
+      const slc = document.getElementById('spanning-local-chain-case');
+      const blockquote = document.createElement('blockquote');
+      const p = document.createElement('p');
+      p.innerHTML = 'No nonzero relation<br>$$\n\\sum_i c_i\\operatorname{per<em>{p,v}(b_i)=0\n$$\nwas found with </em><span class="elm-math-local-chain" data-raw-text="$ x $ up to $ y $"><span class="elm-math-local-original" style="display:none;">$ x $ up to $ y $</span><span class="elm-math-local-rendered"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mtext>t</mtext></mrow><annotation encoding="application/x-tex">t</annotation></semantics></math></span></span></span></span> $z$ end.';
+      blockquote.appendChild(p);
+      slc.appendChild(blockquote);
+    }
   });
   await loadContentScripts(page);
   await page.waitForTimeout(800);
@@ -614,7 +659,36 @@ For the depth-one basis, one has
       tdEmBackslashRendered: document.querySelectorAll('#td-em-backslash .katex:not(.katex-error)').length,
       tdEmBackslashTex: annotation('#td-em-backslash annotation[encoding="application/x-tex"]'),
       tdEmAmpRendered: document.querySelectorAll('#td-em-amp .katex:not(.katex-error)').length,
-      tdEmAmpTex: annotation('#td-em-amp annotation[encoding="application/x-tex"]')
+      tdEmAmpTex: annotation('#td-em-amp annotation[encoding="application/x-tex"]'),
+      tdFlushEmRendered: document.querySelectorAll('#td-flush-em .katex:not(.katex-error)').length,
+      tdFlushEmTex: annotation('#td-flush-em annotation[encoding="application/x-tex"]'),
+      crossDisplayInlineKatex: document.querySelectorAll('#crossing-display-inline-case .katex').length,
+      crossDisplayInlineTex: annotation('#crossing-display-inline-case annotation[encoding="application/x-tex"]'),
+      crossDisplayInlineBlocks: document.querySelectorAll('#crossing-display-inline-case .elm-math-rescued-wrapper').length,
+      crossDisplayInlineRaw: document.querySelector('#crossing-display-inline-case .elm-math-rescued-wrapper')?.dataset.rawText,
+      crossDisplayInlineEmptyDisplays: [...document.querySelectorAll('#crossing-display-inline-case .katex-mathml annotation')].filter((a) => !(a.textContent || '').trim()).length,
+      crossProseEmPreserved: document.querySelectorAll('#crossing-prose-negative-case .elm-math-rescued-wrapper em').length || document.querySelectorAll('#crossing-prose-negative-case #cross-prose-negative em').length,
+      crossProseKatex: document.querySelectorAll('#crossing-prose-negative-case .katex').length,
+      crossRealKatex: document.querySelectorAll('#crossing-real-operator-case .katex').length,
+      crossRealTex: annotation('#crossing-real-operator-case annotation[encoding="application/x-tex"]'),
+      crossRealBlocks: document.querySelectorAll('#crossing-real-operator-case .elm-math-rescued-wrapper').length,
+      crossRealRaw: document.querySelector('#crossing-real-operator-case .elm-math-rescued-wrapper')?.dataset.rawText,
+      crossRealEmpty: [...document.querySelectorAll('#crossing-real-operator-case .katex-mathml annotation')].filter((a) => !(a.textContent || '').trim()).length,
+      brDisplayKatex: document.querySelectorAll('#br-display-case .katex').length,
+      brDisplayTex: annotation('#br-display-case annotation[encoding="application/x-tex"]'),
+      brDisplayBlocks: document.querySelectorAll('#br-display-case .elm-math-rescued-wrapper').length,
+      brDisplayEmpty: [...document.querySelectorAll('#br-display-case .katex-mathml annotation')].filter((a) => !(a.textContent || '').trim()).length,
+      brDisplayBrKept: document.querySelectorAll('#br-display-case .elm-math-rescued-wrapper br').length,
+      brProseKatex: document.querySelectorAll('#br-prose-case .katex').length,
+      brProseBrKept: document.querySelectorAll('#br-prose-case .elm-math-rescued-wrapper br').length || document.querySelectorAll('#br-prose-case #br-prose-p br').length,
+      spanningDisplayProseKatex: document.querySelectorAll('#spanning-display-prose-case .katex').length,
+      spanningDisplayProseTex: annotation('#spanning-display-prose-case annotation[encoding="application/x-tex"]'),
+      spanningDisplayProseBlocks: document.querySelectorAll('#spanning-display-prose-case .elm-math-rescued-wrapper').length,
+      spanningDisplayProseEmpty: [...document.querySelectorAll('#spanning-display-prose-case .katex-mathml annotation')].filter((a) => !(a.textContent || '').trim()).length,
+      spanningLCKatex: document.querySelectorAll('#spanning-local-chain-case .katex').length,
+      spanningLCTex: annotation('#spanning-local-chain-case annotation[encoding="application/x-tex"]'),
+      spanningLCBlocks: document.querySelectorAll('#spanning-local-chain-case .elm-math-rescued-wrapper').length,
+      spanningLCEmpty: [...document.querySelectorAll('#spanning-local-chain-case .katex-mathml annotation')].filter((a) => !(a.textContent || '').trim()).length,
     };
   });
   assert(initial.setextRaw?.includes('\n=\n'), 'Setext-swallowed equals was not restored');
@@ -906,6 +980,46 @@ For the depth-one basis, one has
     'Markdown-damaged pmatrix inside a td cell with backslash was not restored');
   assert(initial.tdEmAmpRendered === 1 && initial.tdEmAmpTex.includes('\\begin{pmatrix}'),
     'Markdown-damaged pmatrix inside a td cell with ampersand was not restored');
+  assert(initial.tdFlushEmRendered === 1 && initial.tdFlushEmTex.includes('x'),
+    'Flush-boundary emphasis inside inline math was not restored');
+  assert(initial.crossDisplayInlineKatex >= 2 && String(initial.crossDisplayInlineTex).includes('_{p,v}'),
+    `crossing display->inline emphasis with eaten subscripts was not restored: tex ${initial.crossDisplayInlineTex}`);
+  assert(initial.crossDisplayInlineRaw?.includes('_{p,v}') && initial.crossDisplayInlineRaw?.includes('_{K,S}'),
+    `crossing raw text lost subscripts: ${initial.crossDisplayInlineRaw}`);
+  assert(initial.crossDisplayInlineEmptyDisplays === 0,
+    'crossing repair left empty display annotations (b3)');
+  assert(initial.crossProseEmPreserved === 1 && initial.crossProseKatex === 1,
+    'a prose emphasis spanning math was incorrectly unwrapped');
+  if (initial.crossRealBlocks === 1) {
+    assert(initial.crossRealKatex >= 2 && String(initial.crossRealTex).includes('per'),
+      `real operator crossing not restored: tex ${initial.crossRealTex}`);
+    assert(initial.crossRealEmpty === 0, 'real operator crossing left empty display');
+  } else {
+    assert(initial.crossRealEmpty === 0, 'real operator crossing without wrapper should not have empty display');
+  }
+  await page.waitForTimeout(700);
+  const stableCross = await page.evaluate(() => ({
+    blocks: document.querySelectorAll('#crossing-display-inline-case .elm-math-rescued-wrapper').length,
+    empty: [...document.querySelectorAll('#crossing-display-inline-case .katex-mathml annotation')].filter((a) => !(a.textContent || '').trim()).length
+  }));
+  assert(stableCross.blocks === 1 && stableCross.empty === 0,
+    `crossing repair was not stable (b6): blocks ${stableCross.blocks} empty ${stableCross.empty}`);
+  assert(initial.brDisplayKatex >= 1 && String(initial.brDisplayTex).includes('per') && String(initial.brDisplayTex).includes('p,v'),
+    `br-split display was not restored: tex ${initial.brDisplayTex} katex ${initial.brDisplayKatex}`);
+  assert(initial.brDisplayBlocks === 1 && initial.brDisplayEmpty === 0,
+    `br-split display left empty or not rescued: blocks ${initial.brDisplayBlocks} empty ${initial.brDisplayEmpty}`);
+  assert(initial.brDisplayBrKept === 0,
+    `br inside math converted, kept ${initial.brDisplayBrKept}`);
+  assert(initial.brProseKatex === 1,
+    `prose br with inline math: katex ${initial.brProseKatex}`);
+  assert(initial.spanningDisplayProseKatex >= 1 && String(initial.spanningDisplayProseTex).includes('x_{p,v}'),
+    `spanning display->prose was not restored: tex ${initial.spanningDisplayProseTex} katex ${initial.spanningDisplayProseKatex}`);
+  assert(initial.spanningDisplayProseBlocks === 1 && initial.spanningDisplayProseEmpty === 0,
+    `spanning display->prose left empty or not rescued: blocks ${initial.spanningDisplayProseBlocks} empty ${initial.spanningDisplayProseEmpty}`);
+  assert(initial.spanningLCKatex >= 1 && String(initial.spanningLCTex).includes('per') && String(initial.spanningLCTex).includes('_{p,v}'),
+    `spanning local-chain display was not restored: tex ${initial.spanningLCTex} katex ${initial.spanningLCKatex}`);
+  assert(initial.spanningLCEmpty === 0,
+    `spanning local-chain left empty display: ${initial.spanningLCEmpty}`);
   assert(initial.setextMatrixAmpRendered === 1 && initial.setextMatrixAmpTex.includes('begin{pmatrix'),
     'Markdown-split display math starting with pmatrix spanning <li> was not restored');
 
