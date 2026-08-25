@@ -120,6 +120,21 @@
     }
   }
 
+  function syncFixerToggleFont(toggle) {
+    // Label is only visible when docked (which implies a native anchor exists);
+    // in compact/fallback the label is hidden, so early-return is exact.
+    const anchor = getLeftmostTopBarControl();
+    if (!anchor) return;
+    const font = getComputedStyle(anchor);
+    const label = toggle.querySelector('.elm-mf-switch-label');
+    if (!label) return;
+    label.style.fontFamily = font.fontFamily;
+    label.style.fontSize = font.fontSize;
+    label.style.fontWeight = font.fontWeight;
+    label.style.lineHeight = font.lineHeight;
+    label.style.letterSpacing = font.letterSpacing;
+  }
+
   // The top bar (even when a banner pushes it down) always stays within the
   // top half of the viewport, while the chat composer - bottom docked in a
   // conversation or vertically centered on the welcome page - never does.
@@ -600,6 +615,7 @@
 
     updateFixerToggle(toggle);
     syncElmAccentColor(promptButton, toggle);
+    syncFixerToggleFont(toggle);
     placeFixerToggle(toggle);
   }
 
