@@ -605,10 +605,18 @@
         const enabled = !isFixerEnabled();
         setFixerEnabled(enabled);
         updateFixerToggle(toggle);
+        // Repaired formulas take different space than raw text, so capture a
+        // content anchor at click time and restore the viewport after the
+        // transition completes. Only the explicit toggle does this —
+        // background scans must never fight the user's scrolling.
         if (enabled) {
-          setTimeout(() => globalThis.ELMMathFixerRuntime?.scan(), 100);
+          requestAnimationFrame(() => {
+            const saved = MATH_REPAIR.captureScrollAnchor?.();
+            globalThis.ELMMathFixerRuntime?.scan();
+            if (saved) requestAnimationFrame(() => MATH_REPAIR.restoreScrollAnchor?.(saved));
+          });
         } else {
-          restoreAllRescuedMath();
+          restoreAllRescuedMath({ preserveScroll: true });
         }
       });
     }

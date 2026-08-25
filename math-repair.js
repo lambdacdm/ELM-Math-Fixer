@@ -754,11 +754,12 @@
     const emphasisNodes = Array.from(clone.querySelectorAll('em, i, strong, b')).filter(
       (node) => !node.parentElement?.closest('em, i, strong, b')
     );
+    if (emphasisNodes.length === 0) return clone;
+    const rangeForPos = document.createRange();
+    rangeForPos.selectNodeContents(clone);
     const positionedNodes = emphasisNodes.map((node) => {
-      const range = document.createRange();
-      range.selectNodeContents(clone);
-      range.setEndBefore(node);
-      const start = range.toString().length;
+      rangeForPos.setEndBefore(node);
+      const start = rangeForPos.toString().length;
       return { node, start, end: start + (node.textContent || '').length };
     });
 
@@ -1256,7 +1257,9 @@
   }
 
   function cleanMathClone(clone) {
-    clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')));
+    if (clone.querySelector('br')) {
+      clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')));
+    }
 
     const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
     const textNodes = [];
@@ -1376,8 +1379,175 @@
 
   let restoreToken = 0;
 
-  function restoreAllRescuedMath() {
+  // Scroll-position preservation across toggle off/on. Repaired formulas take
+  // different space than raw text, so absolute scrollTop values are meaningless
+  // after a transition; instead we pin the viewport to a stable content
+  // element. TARGET_ELEMENTS are only hidden/revealed by the toggle (never
+  // removed), so the anchor's element identity survives both directions.
+  const SCROLL_ANCHOR_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, td, th';
+  const SCROLL_ANCHOR_SKIP_SELECTOR =
+    '#elm-math-fixer-toggle, #elm-math-fixer-prompt-button, #elm-math-fixer-prompt-panel';
+
+  function isScrollableElement(el) {
+    const style = getComputedStyle(el);
+    if (!['auto', 'scroll', 'overlay'].includes(style.overflowY)) return false;
+    return el.scrollHeight > el.clientHeight + 1;
+  }
+
+  function isPotentialScrollableElement(el) {
+    const style = getComputedStyle(el);
+    return ['auto', 'scroll', 'overlay'].includes(style.overflowY);
+  }
+
+  function collectScrollScrollers(fromElement) {
+    const scrollers = [];
+    let node = fromElement;
+    while (node && node !== document.body) {
+      if (node.nodeType === Node.ELEMENT_NODE && isScrollableElement(node)) {
+        scrollers.unshift(node);
+      }
+      node = node.parentElement;
+    }
+    const scrollingElement = document.scrollingElement;
+    if (scrollingElement) scrollers.unshift(scrollingElement);
+    return scrollers;
+  }
+
+  function collectPotentialScrollers(fromElement) {
+    const scrollers = [];
+    let node = fromElement;
+    while (node && node !== document.body) {
+      if (node.nodeType === Node.ELEMENT_NODE && isPotentialScrollableElement(node)) {
+        scrollers.unshift(node);
+      }
+      node = node.parentElement;
+    }
+    const scrollingElement = document.scrollingElement;
+    if (scrollingElement) scrollers.unshift(scrollingElement);
+    return scrollers;
+  }
+
+  function captureScrollAnchor() {
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    const candidates = [
+      [centerX, centerY],
+      [centerX, centerY - Math.min(200, centerY * 0.5)],
+      [centerX, centerY + Math.min(200, centerY * 0.5)]
+    ];
+    let anchor = null;
+    for (const [x, y] of candidates) {
+      const stack = document.elementsFromPoint(x, y);
+      for (const hit of stack) {
+        if (hit.nodeType !== Node.ELEMENT_NODE) continue;
+        if (hit.closest(SCROLL_ANCHOR_SKIP_SELECTOR)) continue;
+        const block = hit.closest('.elm-math-rescued-block');
+        const base = block ? (block.previousElementSibling || block.nextElementSibling) : hit;
+        if (!base) continue;
+        let cand = null;
+        if (base.matches?.(SCROLL_ANCHOR_SELECTOR) && base.getBoundingClientRect().height > 0) {
+          cand = base;
+        } else {
+          cand = base.closest(SCROLL_ANCHOR_SELECTOR);
+          if (cand && cand.getBoundingClientRect().height === 0) cand = null;
+        }
+        if (!cand || cand.getBoundingClientRect().height === 0) {
+          let sib = base.nextElementSibling;
+          for (let k = 0; k < 3 && sib; k++, sib = sib.nextElementSibling) {
+            if (sib.matches(SCROLL_ANCHOR_SELECTOR) && sib.getBoundingClientRect().height > 0) { cand = sib; break; }
+          }
+          if (!cand || cand.getBoundingClientRect().height === 0) continue;
+        }
+        if (cand.closest(SCROLL_ANCHOR_SKIP_SELECTOR) || cand.closest('.elm-math-split-original')) continue;
+        anchor = cand;
+        break;
+      }
+      if (anchor) break;
+    }
+    if (!anchor) {
+      const cx = centerX, cy = centerY;
+      let best = null, bestDist = Infinity;
+      document.querySelectorAll(SCROLL_ANCHOR_SELECTOR).forEach((el) => {
+        if (!el.isConnected || el.getBoundingClientRect().height === 0) return;
+        if (el.closest(SCROLL_ANCHOR_SKIP_SELECTOR) || el.closest('.elm-math-split-original')) return;
+        const r = el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > window.innerHeight) return;
+        const dist = Math.abs((r.top + r.bottom) / 2 - cy) + Math.abs((r.left + r.right) / 2 - cx) * 0.3;
+        if (dist < bestDist) { bestDist = dist; best = el; }
+      });
+      anchor = best;
+    }
+    if (!anchor || !anchor.isConnected) return null;
+
+    const scrollers = collectPotentialScrollers(anchor)
+      .map((el) => {
+        const anchorRect = anchor.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        return { el, anchorOffset: anchorRect.top - elRect.top, scrollTop: el.scrollTop };
+      });
+    return { anchor, scrollers };
+  }
+
+  function restoreScrollAnchor(saved) {
+    if (!saved || !saved.anchor) return;
+    let anchor = saved.anchor;
+    if (!anchor.isConnected || (anchor.getBoundingClientRect().height === 0)) {
+      let found = null;
+      let cursor = anchor.isConnected ? anchor : (anchor.previousElementSibling || anchor.parentElement);
+      for (let step = 0; step < 24 && cursor; step++) {
+        if (cursor !== anchor && cursor.isConnected &&
+            cursor.getBoundingClientRect().height > 0 &&
+            (cursor.matches(SCROLL_ANCHOR_SELECTOR) || cursor.querySelector?.(SCROLL_ANCHOR_SELECTOR))) {
+          found = cursor.matches(SCROLL_ANCHOR_SELECTOR) ? cursor : cursor.querySelector(SCROLL_ANCHOR_SELECTOR);
+          break;
+        }
+        cursor = cursor.nextElementSibling || (cursor.parentElement && cursor.parentElement.closest(SCROLL_ANCHOR_SELECTOR));
+      }
+      if (found) anchor = found;
+      else return;
+    }
+    if (!anchor.isConnected) return;
+
+    // Union saved + fresh potential scrollers so a container that became
+    // scrollable after the transition is still corrected.
+    const freshScrollers = collectPotentialScrollers(anchor);
+    const seen = new Set(saved.scrollers.map((s) => s.el));
+    const unionScrollers = [...saved.scrollers];
+    for (const el of freshScrollers) {
+      if (!seen.has(el)) {
+        const anchorRect = anchor.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        // Fresh scroller had no saved offset; extrapolate from document root delta
+        const rootDelta = (() => {
+          const rootSaved = saved.scrollers.find((s) => s.el === document.scrollingElement);
+          const rootFresh = freshScrollers.find((s) => s.el === document.scrollingElement);
+          // Not needed for now; use current offset as base (delta 0 => no correction if fresh)
+          return 0;
+        })();
+        unionScrollers.push({ el, anchorOffset: anchorRect.top - elRect.top - rootDelta, scrollTop: el.scrollTop });
+      }
+    }
+
+    for (const savedScroller of unionScrollers) {
+      const el = savedScroller.el;
+      if (!el.isConnected) continue;
+      // Re-find fresh anchor position for this scroller (anchor may have moved)
+      const anchorRect = anchor.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const currentOffset = anchorRect.top - elRect.top;
+      // Use saved offset if available, otherwise treat as 0 delta (fresh scroller)
+      const savedEntry = saved.scrollers.find((s) => s.el === el);
+      const savedOffset = savedEntry ? savedEntry.anchorOffset : currentOffset;
+      const delta = currentOffset - savedOffset;
+      if (Math.abs(delta) < 1) continue;
+      const max = el.scrollHeight - el.clientHeight;
+      el.scrollTop = Math.max(0, Math.min((savedEntry ? savedEntry.scrollTop : el.scrollTop) + delta, max));
+    }
+  }
+
+  function restoreAllRescuedMath(options = {}) {
     const token = ++restoreToken;
+    const savedScroll = options.preserveScroll ? captureScrollAnchor() : null;
 
     const phases = [
       // Phase 1: local chain + native brace repair
@@ -1439,9 +1609,27 @@
 
     function runPhase(i) {
       if (token !== restoreToken) return;
-      if (i >= phases.length) return;
-      phases[i]();
-      requestAnimationFrame(() => runPhase(i + 1));
+      if (i >= phases.length) {
+        if (savedScroll) requestAnimationFrame(() => {
+          if (token !== restoreToken) return;
+          restoreScrollAnchor(savedScroll);
+          options.onComplete?.();
+        });
+        else options.onComplete?.();
+        return;
+      }
+      // Collapse the 4 phases synchronously to avoid 3 intermediate paints;
+      // a single rAF after all phases restores the viewport once.
+      for (let p = i; p < phases.length; p++) {
+        if (token !== restoreToken) return;
+        phases[p]();
+      }
+      if (savedScroll) requestAnimationFrame(() => {
+        if (token !== restoreToken) return;
+        restoreScrollAnchor(savedScroll);
+        options.onComplete?.();
+      });
+      else options.onComplete?.();
     }
 
     runPhase(0);
@@ -1872,5 +2060,10 @@
     }
   }
 
-  globalThis.ELMMathFixerRepair = { processContainer, restoreAllRescuedMath };
+  globalThis.ELMMathFixerRepair = {
+    processContainer,
+    restoreAllRescuedMath,
+    captureScrollAnchor,
+    restoreScrollAnchor
+  };
 })();
