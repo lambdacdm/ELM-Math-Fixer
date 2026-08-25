@@ -71,10 +71,6 @@ markdown.elm-math-rescued-container,
   border-color: transparent;
 }
 
-#elm-math-fixer-prompt-button.elm-mf-sidebar.elm-mf-attention {
-  animation: elm-mf-sidebar-pulse 1.4s ease-in-out infinite;
-}
-
 #elm-math-fixer-prompt-button.elm-mf-sidebar .elm-mf-launcher-icon {
   align-items: center;
   display: inline-flex;
@@ -88,52 +84,6 @@ markdown.elm-math-rescued-container,
 
 #elm-math-fixer-prompt-button.elm-mf-hidden {
   display: none !important;
-}
-
-#elm-math-fixer-tools-guide {
-  align-items: center;
-  background: #fff;
-  border: 1px solid var(--elm-mf-accent, #2f6f59);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
-  color: #1f2933;
-  display: flex;
-  font: 500 14px/1.3 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  gap: 10px;
-  max-width: min(330px, calc(100vw - 32px));
-  padding: 8px 10px;
-  position: fixed;
-  z-index: 9999;
-}
-
-#elm-math-fixer-tools-guide .elm-mf-guide-open {
-  background: var(--elm-mf-accent, #2f6f59);
-  border: 1px solid var(--elm-mf-accent, #2f6f59);
-  border-radius: 6px;
-  color: #fff;
-  cursor: pointer;
-  flex: 0 0 auto;
-  font: 650 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  padding: 6px 9px;
-}
-
-#elm-math-fixer-tools-guide .elm-mf-guide-close {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: #c62828;
-  cursor: pointer;
-  display: inline-flex;
-  flex: 0 0 auto;
-  font: 700 22px/1 system-ui, sans-serif;
-  height: 26px;
-  justify-content: center;
-  padding: 0;
-  width: 26px;
-}
-
-.elm-mf-tools-attention {
-  animation: elm-mf-tools-pulse 1.2s ease-in-out infinite !important;
 }
 
 #elm-math-fixer-toggle {
@@ -266,10 +216,6 @@ markdown.elm-math-rescued-container,
   display: inline;
 }
 
-#elm-math-fixer-prompt-button.elm-mf-attention {
-  animation: elm-mf-pulse 1.4s ease-in-out infinite;
-}
-
 #elm-math-fixer-prompt-button.elm-mf-fallback {
   margin: 0;
   position: fixed;
@@ -304,37 +250,6 @@ markdown.elm-math-rescued-container,
 
 #elm-math-fixer-prompt-button.elm-mf-compact .elm-mf-launcher-label {
   display: none;
-}
-
-@keyframes elm-mf-pulse {
-  0%, 100% {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 0 0 color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 55%, transparent);
-    transform: translateY(0);
-  }
-  50% {
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18), 0 0 0 7px color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 0%, transparent);
-    transform: translateY(-1px);
-  }
-}
-
-@keyframes elm-mf-sidebar-pulse {
-  0%, 100% {
-    background: transparent;
-    box-shadow: none;
-  }
-  50% {
-    background: color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 12%, transparent);
-    box-shadow: none;
-  }
-}
-
-@keyframes elm-mf-tools-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 55%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--elm-mf-accent, #2f6f59) 0%, transparent);
-  }
 }
 
 #elm-math-fixer-prompt-panel {

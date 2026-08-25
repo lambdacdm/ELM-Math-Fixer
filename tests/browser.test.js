@@ -1277,6 +1277,108 @@ async function runNoTopBarControlsTest(browser) {
   return result;
 }
 
+async function runWelcomePageTest(browser) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  await page.setContent(`<!doctype html><html><head><style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; }
+    header { align-items: center; background: #e5e5e5; display: flex; height: 92px; justify-content: space-between; padding: 0 30px; }
+    #tools { height: 42px; width: 90px; }
+    .right { align-items: center; display: flex; gap: 10px; }
+    .right button { height: 40px; }
+    .banner { background: #fffbe6; font-size: 13px; height: 90px; padding: 14px 60px 14px 24px; position: relative; }
+    .banner-dismiss { height: 34px; position: absolute; right: 16px; top: 16px; width: 34px; }
+    .composer { background: #ddd; left: 350px; position: absolute; top: 58%; width: 700px; }
+    .composer-input { background: #fff; box-sizing: border-box; height: 44px; padding: 10px; width: 100%; }
+    .composer-row { align-items: center; display: flex; gap: 8px; padding: 8px 12px; }
+    .composer-row button { height: 34px; }
+    #model-menu { background: #fff; border: 1px solid #ccc; position: fixed; top: 0; z-index: 500; }
+  </style></head><body>
+    <div class="banner">Cost banner. <button class="banner-dismiss" id="banner-dismiss">&#215;</button></div>
+    <header><button id="tools">Tools</button><div class="right" id="top-bar-right"><button id="chat-icon">Chat</button><button id="api-key">Request an ELM API Key</button><button id="responsible-ai">Responsible AI</button><button id="support">Support</button><button id="avatar">Account</button></div></header>
+    <div class="composer"><div class="composer-input" contenteditable="true">Ask anything...</div><div class="composer-row"><button id="composer-plus">+</button><button id="composer-empty">Empty Prompt</button><button id="composer-model">GPT 5.6 Sol</button><button id="composer-web">Include Web Search</button><button id="composer-image">Image</button><button id="composer-send">Send</button></div></div>
+  </body></html>`);
+  await loadContentScripts(page);
+  await page.waitForTimeout(800);
+
+  const state = () => page.evaluate(() => {
+    const toggle = document.querySelector('#elm-math-fixer-toggle');
+    const prompt = document.querySelector('#elm-math-fixer-prompt-button');
+    return {
+      toggleMissing: !toggle,
+      toggleInComposer: Boolean(toggle?.closest('.composer')),
+      toggleInMenu: Boolean(toggle?.closest('#model-menu')),
+      toggleCompact: Boolean(toggle?.classList.contains('elm-mf-compact')),
+      toggleFallback: Boolean(toggle?.classList.contains('elm-mf-fallback')),
+      toggleParent: toggle?.parentElement?.id || toggle?.parentElement?.tagName,
+      toggleNext: toggle?.nextElementSibling?.id || null,
+      promptHidden: getComputedStyle(prompt).display === 'none',
+      guideAbsent: !document.getElementById('elm-math-fixer-tools-guide')
+    };
+  });
+
+  // Welcome page: no message container and a closed sidebar must still dock
+  // the switch into the top bar row, and the composer row (six controls,
+  // above the old 70% line on tall viewports) must never win the anchor vote.
+  let result = await state();
+  assert(!result.toggleMissing, 'welcome page did not create the Fixer switch');
+  assert(result.toggleParent === 'top-bar-right' && result.toggleNext === 'chat-icon',
+    'welcome page did not dock the Fixer switch left of the top bar cluster');
+  assert(!result.toggleInComposer && !result.toggleCompact && !result.toggleFallback,
+    'welcome page placed the Fixer switch in the composer or in compact mode');
+  assert(result.promptHidden, 'welcome page should hide the prompt launcher without the sidebar');
+  assert(result.guideAbsent, 'the removed onboarding guide bubble came back');
+
+  // A model picker menu covering the leftmost top bar control must not drag
+  // the switch into the menu or into compact mode: the switch stays docked
+  // and the menu simply covers it.
+  await page.evaluate(() => {
+    const icon = document.querySelector('#chat-icon').getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.id = 'model-menu';
+    menu.style.left = `${icon.left - 20}px`;
+    menu.style.width = `${icon.width + 40}px`;
+    menu.style.height = '100vh';
+    document.body.appendChild(menu);
+  });
+  await page.waitForTimeout(800);
+  result = await state();
+  assert(result.toggleParent === 'top-bar-right' && !result.toggleInMenu &&
+    !result.toggleCompact && !result.toggleFallback,
+    'an open menu bounced the docked Fixer switch out of the top bar');
+  assert(result.toggleNext === 'api-key',
+    'Fixer switch did not re-anchor to the closest visible top bar control under the menu');
+
+  // With the whole top bar row covered, an already docked switch must stay
+  // exactly where it is instead of moving or changing mode.
+  await page.evaluate(() => {
+    const menu = document.querySelector('#model-menu');
+    menu.style.left = '0px';
+    menu.style.width = '100vw';
+  });
+  await page.waitForTimeout(800);
+  result = await state();
+  assert(result.toggleParent === 'top-bar-right' && result.toggleNext === 'api-key' &&
+    !result.toggleCompact && !result.toggleInMenu,
+    'a full overlay moved the docked Fixer switch or changed its mode');
+
+  await page.evaluate(() => document.querySelector('#model-menu').remove());
+  await page.waitForTimeout(800);
+  result = await state();
+  assert(result.toggleParent === 'top-bar-right' && result.toggleNext === 'chat-icon',
+    'closing the menu did not restore the Fixer switch position');
+
+  await page.evaluate(() => document.querySelector('.banner').remove());
+  await page.waitForTimeout(800);
+  result = await state();
+  assert(result.toggleParent === 'top-bar-right' && result.toggleNext === 'chat-icon' &&
+    !result.toggleCompact,
+    'dismissing the banner did not keep the Fixer switch docked');
+
+  await page.close();
+  return result;
+}
+
 (async () => {
   const executablePath = findChrome();
   if (!executablePath) throw new Error('Chrome was not found. Set CHROME_PATH to run browser tests.');
@@ -1286,6 +1388,7 @@ async function runNoTopBarControlsTest(browser) {
     const result = await runMathRepairTests(browser);
     const modern = await runModernUiTest(browser);
     const noControls = await runNoTopBarControlsTest(browser);
+    const welcome = await runWelcomePageTest(browser);
     console.log(`Browser tests passed: ${JSON.stringify({
       setext: result.initial.setextReason,
       splitBlocks: result.initial.splitBlocks,
@@ -1294,7 +1397,8 @@ async function runNoTopBarControlsTest(browser) {
       modernSidebar: modern.wide.promptInSidebar,
       toggleBeforeChatIcon: modern.wide.toggleBeforeChatIcon,
       compactFixer: modern.narrow.powerVisible,
-      fallbackToggle: noControls.compact
+      fallbackToggle: noControls.compact,
+      welcomeDocked: welcome.toggleNext === 'chat-icon'
     })}`);
   } finally {
     await browser.close();

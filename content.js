@@ -6,13 +6,8 @@
   const PROMPT_BUTTON_ID = 'elm-math-fixer-prompt-button';
   const FIXER_TOGGLE_ID = 'elm-math-fixer-toggle';
   const PROMPT_PANEL_ID = 'elm-math-fixer-prompt-panel';
-  const TOOLS_GUIDE_ID = 'elm-math-fixer-tools-guide';
-  const PROMPT_DISCOVERED_STORAGE_KEY = 'elmMathFixerPromptLocationDiscoveredV2';
-  const PROMPT_GUIDE_SESSION_KEY = 'elmMathFixerPromptGuideShown';
   const FIXER_ENABLED_STORAGE_KEY = 'elmMathFixerEnabled';
   let fixerEnabledFallback = true;
-  let toolsAttentionTimer = null;
-  let sidebarAttentionTimer = null;
 
   const PROMPT_GROUPS = globalThis.ELMMathFixerPrompts || [];
 
@@ -49,191 +44,6 @@
   function isVisible(el) {
     const rect = el.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0;
-  }
-
-  function isPromptLocationDiscovered() {
-    try {
-      return localStorage.getItem(PROMPT_DISCOVERED_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  }
-
-  function markPromptLocationDiscovered() {
-    try {
-      localStorage.setItem(PROMPT_DISCOVERED_STORAGE_KEY, 'true');
-    } catch {
-      // Discovery state is optional when storage is unavailable.
-    }
-  }
-
-  function wasPromptGuideShownThisSession() {
-    try {
-      return sessionStorage.getItem(PROMPT_GUIDE_SESSION_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  }
-
-  function markPromptGuideShownThisSession() {
-    try {
-      sessionStorage.setItem(PROMPT_GUIDE_SESSION_KEY, 'true');
-    } catch {
-      // The guide can still be displayed without session storage.
-    }
-  }
-
-  function findToolsControl() {
-    const labels = Array.from(document.querySelectorAll('button, a, span, div'))
-      .filter((node) => {
-        if (!isVisible(node) || (node.textContent || '').trim() !== 'Tools') return false;
-        const rect = node.getBoundingClientRect();
-        return rect.top >= 0 && rect.top < 110 && rect.left < window.innerWidth * 0.35;
-      })
-      .sort((a, b) => a.children.length - b.children.length);
-
-    for (const label of labels) {
-      const control = label.closest('button, a, [role="button"]') || label;
-      if (isVisible(control)) return control;
-    }
-
-    return Array.from(document.querySelectorAll('button, a, [role="button"]'))
-      .filter((control) => {
-        if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
-        const rect = control.getBoundingClientRect();
-        return rect.top >= 0 && rect.top < 100 && rect.left >= 0 && rect.left < 180 &&
-          rect.width >= 24 && rect.width <= 140 && rect.height >= 24 && rect.height <= 64;
-      })
-      .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)[0] || null;
-  }
-
-  function positionToolsGuide(guide, toolsControl) {
-    const rect = toolsControl.getBoundingClientRect();
-    const guideRect = guide.getBoundingClientRect();
-    const margin = 10;
-    const left = Math.max(16, Math.min(rect.left, window.innerWidth - guideRect.width - 16));
-    const below = rect.bottom + margin;
-    const top = below + guideRect.height <= window.innerHeight - 16
-      ? below
-      : Math.max(16, rect.top - guideRect.height - margin);
-    guide.style.left = `${left}px`;
-    guide.style.top = `${top}px`;
-  }
-
-  function removeToolsGuide() {
-    document.getElementById(TOOLS_GUIDE_ID)?.remove();
-    document.querySelectorAll('.elm-mf-tools-attention').forEach((control) => {
-      control.classList.remove('elm-mf-tools-attention');
-      control.style.removeProperty('--elm-mf-accent');
-    });
-    clearTimeout(toolsAttentionTimer);
-  }
-
-  function showPromptLocationGuide(targetControl, messageText, actionText) {
-    const existing = document.getElementById(TOOLS_GUIDE_ID);
-    if (existing && targetControl) {
-      document.querySelectorAll('.elm-mf-tools-attention').forEach((control) => {
-        if (control !== targetControl) {
-          control.classList.remove('elm-mf-tools-attention');
-          control.style.removeProperty('--elm-mf-accent');
-        }
-      });
-      existing._elmTargetControl = targetControl;
-      existing.querySelector('.elm-mf-guide-message').textContent = messageText;
-      existing.querySelector('.elm-mf-guide-open').textContent = actionText;
-      const accent = readElmAccentColor();
-      if (accent) targetControl.style.setProperty('--elm-mf-accent', accent);
-      targetControl.classList.add('elm-mf-tools-attention');
-      positionToolsGuide(existing, targetControl);
-      clearTimeout(toolsAttentionTimer);
-      toolsAttentionTimer = window.setTimeout(() => {
-        targetControl.classList.remove('elm-mf-tools-attention');
-        targetControl.style.removeProperty('--elm-mf-accent');
-      }, 5000);
-      return;
-    }
-    if (existing || !targetControl || wasPromptGuideShownThisSession()) return;
-
-    markPromptGuideShownThisSession();
-    const guide = document.createElement('div');
-    guide.id = TOOLS_GUIDE_ID;
-    guide.setAttribute('role', 'dialog');
-    guide.setAttribute('aria-label', 'Fixer Prompts location');
-    guide._elmTargetControl = targetControl;
-
-    const message = document.createElement('span');
-    message.className = 'elm-mf-guide-message';
-    message.textContent = messageText;
-    const openButton = document.createElement('button');
-    openButton.className = 'elm-mf-guide-open';
-    openButton.type = 'button';
-    openButton.textContent = actionText;
-    const closeButton = document.createElement('button');
-    closeButton.className = 'elm-mf-guide-close';
-    closeButton.type = 'button';
-    closeButton.setAttribute('aria-label', 'Dismiss');
-    closeButton.textContent = '\u00d7';
-
-    guide.appendChild(message);
-    guide.appendChild(openButton);
-    guide.appendChild(closeButton);
-    document.body.appendChild(guide);
-
-    const accent = readElmAccentColor();
-    if (accent) {
-      guide.style.setProperty('--elm-mf-accent', accent);
-      targetControl.style.setProperty('--elm-mf-accent', accent);
-    }
-    targetControl.classList.add('elm-mf-tools-attention');
-    positionToolsGuide(guide, targetControl);
-
-    openButton.addEventListener('click', () => {
-      const control = guide._elmTargetControl;
-      removeToolsGuide();
-      control?.click();
-      window.setTimeout(ensurePromptLauncher, 180);
-    });
-    closeButton.addEventListener('click', removeToolsGuide);
-
-    toolsAttentionTimer = window.setTimeout(() => {
-      targetControl.classList.remove('elm-mf-tools-attention');
-      targetControl.style.removeProperty('--elm-mf-accent');
-    }, 5000);
-    window.setTimeout(() => {
-      document.getElementById(TOOLS_GUIDE_ID)?.remove();
-    }, 10000);
-  }
-
-  function showToolsGuide() {
-    showPromptLocationGuide(findToolsControl(), 'Fixer Prompts is inside Tools.', 'Open Tools');
-  }
-
-  function highlightPromptDiscovery(button) {
-    removeToolsGuide();
-    if (button.dataset.discoveryHighlighted === 'true') return;
-
-    button.dataset.discoveryHighlighted = 'true';
-    button.classList.add('elm-mf-attention');
-    clearTimeout(sidebarAttentionTimer);
-    sidebarAttentionTimer = window.setTimeout(() => {
-      button.classList.remove('elm-mf-attention');
-    }, 5000);
-  }
-
-  function ensurePromptDiscovery(button) {
-    if (isPromptLocationDiscovered()) {
-      button.classList.remove('elm-mf-attention');
-      removeToolsGuide();
-      return;
-    }
-
-    if (button.classList.contains('elm-mf-sidebar')) {
-      highlightPromptDiscovery(button);
-      return;
-    }
-
-    button.classList.remove('elm-mf-attention');
-    showToolsGuide();
   }
 
   function isExtensionToolbarControl(control) {
@@ -292,26 +102,52 @@
     }
   }
 
-  // The chat input bar at the bottom of the viewport (and any other bottom
-  // docked controls) must never be treated as top bar anchors: its top edge
-  // always sits within ~100px of the bottom, i.e. beyond 70% of a realistic
-  // viewport height, while a banner plus the top bar below it always fit
-  // within the top 70%.
+  // The top bar (even when a banner pushes it down) always stays within the
+  // top half of the viewport, while the chat composer - bottom docked in a
+  // conversation or vertically centered on the welcome page - never does.
   function isInTopBarRegion(rect) {
-    return rect.top >= 0 && rect.top < window.innerHeight * 0.7;
+    return rect.top >= 0 && rect.top < window.innerHeight * 0.5;
   }
+
+  // The chat composer input ("Ask anything...") is the only text field that
+  // sits in the bottom half of the viewport. Controls at or below its top
+  // edge belong to the composer row and must never anchor top bar placement,
+  // even when the welcome page centers the composer unusually high.
+  function getChatInputRect() {
+    const inputs = document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable=""]');
+    for (const input of inputs) {
+      const rect = input.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && rect.top > window.innerHeight * 0.5) return rect;
+    }
+    return null;
+  }
+
+  // Known ELM top bar labels, in preference order. The row containing one of
+  // them is always the real top bar, even when another row (a chat composer
+  // or an open menu) holds more controls.
+  const TOP_BAR_ANCHOR_PATTERNS = [
+    /request\s+an\s+.*api\s+key/i,
+    /responsible\s+ai/i,
+    /support/i
+  ];
 
   // A banner above the top bar pushes the top bar down and adds its own
   // controls (e.g. a dismiss button). Cluster candidate controls into rows by
-  // vertical position, then treat the row with the most controls as the top
-  // bar: banner rows usually hold one or two controls, the top bar holds more.
+  // vertical position, then prefer the row containing a known top bar label;
+  // without one, fall back to the row with the most controls (banner rows
+  // usually hold one or two controls, the top bar holds more).
   function getVisibleTopBarControls() {
+    const composerRect = getChatInputRect();
     const candidates = Array.from(
       document.querySelectorAll('button, a, [role="button"], [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
     ).filter((control) => {
       if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
       const rect = control.getBoundingClientRect();
-      return isInTopBarRegion(rect) && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38;
+      if (!(isInTopBarRegion(rect) && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38)) {
+        return false;
+      }
+      // Controls at or below the composer input belong to the composer row.
+      return !composerRect || rect.top < composerRect.top - 8;
     });
     if (candidates.length === 0) return [];
 
@@ -323,15 +159,36 @@
       else bands.push({ top: rect.top, controls: [control] });
     });
 
-    let topBarBand = bands[0];
-    for (const band of bands) {
-      if (band.controls.length > topBarBand.controls.length) topBarBand = band;
-    }
     // A lone banner control (e.g. its dismiss button) must never be treated as
     // a top bar anchor; without at least two controls, fall back to compact
     // positioning instead.
-    if (topBarBand.controls.length < 2) return [];
-    return topBarBand.controls;
+    const viableBands = bands.filter((band) => band.controls.length >= 2);
+    if (viableBands.length === 0) return [];
+
+    let topBarBand = null;
+    for (const pattern of TOP_BAR_ANCHOR_PATTERNS) {
+      const matches = viableBands.filter((band) =>
+        band.controls.some((control) => pattern.test((control.textContent || '').trim()))
+      );
+      if (matches.length > 0) {
+        topBarBand = matches.sort((a, b) => b.controls.length - a.controls.length || a.top - b.top)[0];
+        break;
+      }
+    }
+    if (!topBarBand) {
+      topBarBand = viableBands.sort((a, b) => b.controls.length - a.controls.length || a.top - b.top)[0];
+    }
+
+    // Menus and dialogs (e.g. the model picker) can cover part of the top bar
+    // row. Anchoring to a covered control would drag the Fixer switch into
+    // the overlay or bounce it into compact mode, so anchor only to controls
+    // the overlay leaves visible; the overlay then hides the switch naturally,
+    // like ELM's own controls. If every control is covered, keep the band so
+    // an already docked switch can simply stay where it is.
+    const exposed = topBarBand.controls.filter(
+      (control) => !isAnchorCoveredByOverlay(control.getBoundingClientRect())
+    );
+    return exposed.length > 0 ? exposed : topBarBand.controls;
   }
 
   function getLeftmostTopBarControl() {
@@ -636,19 +493,27 @@
   function placeFixerToggle(toggle) {
     const leftmost = getLeftmostTopBarControl();
     const leftmostRect = leftmost?.getBoundingClientRect();
-    if (leftmostRect && isInTopBarRegion(leftmostRect) && !isAnchorCoveredByOverlay(leftmostRect)) {
-      toggle.classList.remove('elm-mf-fallback', 'elm-mf-compact');
-      toggle.style.left = '';
-      toggle.style.top = '';
-      toggle.style.right = '';
-      toggle.style.bottom = '';
-      const parent = leftmost.parentElement;
-      if (toggle.parentElement !== parent || toggle.nextSibling !== leftmost) {
-        parent.insertBefore(toggle, leftmost);
+    if (leftmostRect && isInTopBarRegion(leftmostRect)) {
+      if (isAnchorCoveredByOverlay(leftmostRect)) {
+        // The whole anchor row is covered by an overlay. An already docked
+        // switch stays put so the overlay hides it like ELM's own controls;
+        // only a switch that is not docked yet falls back to compact mode.
+        const isDocked = toggle.parentElement !== document.body &&
+          !toggle.classList.contains('elm-mf-fallback');
+        if (isDocked) return;
+      } else {
+        toggle.classList.remove('elm-mf-fallback', 'elm-mf-compact');
+        toggle.style.left = '';
+        toggle.style.top = '';
+        toggle.style.right = '';
+        toggle.style.bottom = '';
+        const parent = leftmost.parentElement;
+        if (toggle.parentElement !== parent || toggle.nextSibling !== leftmost) {
+          parent.insertBefore(toggle, leftmost);
+        }
+        return;
       }
-      return;
     }
-
     positionCompactFixerToggle(toggle);
   }
 
@@ -813,9 +678,6 @@
     button.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      markPromptLocationDiscovered();
-      button.classList.remove('elm-mf-attention');
-      removeToolsGuide();
       panel.hidden = false;
       positionPromptPanel(panel, button);
     });
@@ -824,7 +686,8 @@
   function ensurePromptLauncher() {
     if (!document.body) return;
     const hasElmChatUi = document.querySelector(CONTAINER_SELECTOR) ||
-      findSidebarLabel('Prompts');
+      findSidebarLabel('Prompts') ||
+      getChatInputRect();
     if (!hasElmChatUi) return;
 
     let button = document.getElementById(PROMPT_BUTTON_ID);
@@ -850,7 +713,6 @@
     }
 
     placePromptButton(button);
-    ensurePromptDiscovery(button);
     ensureFixerToggle(button);
   }
 
