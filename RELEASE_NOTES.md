@@ -1,12 +1,25 @@
-# ELM Math Fixer v1.3.13
+# ELM Math Fixer v1.4
 
-## What's New since v1.3.12
+## Summary of changes since v1.3
 
-### Fixes
-- **Toggle no longer jumps the page** (v1.3.13): toggling the Fixer switch off/on now preserves the viewport position. Before the transition, the extension pins the viewport to the nearest visible paragraph (a content anchor); after the repair/restore completes, it re-aligns every scrollable container so the same paragraph stays where it was. This works across nested scroll containers and both directions (raw↔rendered), eliminating the accumulated drift that grew with page length.
-- **Toggle completes without intermediate flicker** (v1.3.13): the restore path now runs all phases synchronously in one task followed by a single scroll-restore frame, instead of spreading layout changes across 4 animation frames.
-- **Fixer label now matches ELM's native font** (v1.3.13): the `Fixer` switch label copies `fontFamily` / `fontSize` / `fontWeight` / `lineHeight` / `letterSpacing` from the leftmost native top-bar control (e.g. `Request an ELM API Key`), so the typography is visually identical.
+v1.4 is a consolidation release: it rolls up all fixes and improvements from the v1.3.1–v1.3.13 patch series with no additional changes.
+
+### Math rendering repairs
+- Rebuilds display math (`$$…$$`) split across paragraphs/headings, including standalone `=`/`-` consumed as Setext markers and damaged subscripts.
+- Repairs emphasis-damaged math: `_…_` eaten into `<em>`, including groups spanning a display/inline boundary and `\operatorname{…}_{…}` with a swallowed closing brace.
+- Repairs `<br>`-split formulas inside a single paragraph (e.g. blockquote `$$<br>…<br>$$`).
+- Repairs mispaired native inline math and doubled escaped set braces in native KaTeX.
+- Restores eaten `\[ … \]` / `\( … \)` delimiters and bare-paren inline math.
+- Guards: rejects empty rendered displays; idempotency guard stops repair/restore ping-pong (no more flicker or selection loss).
+
+### Performance
+- Fixer switch appears as soon as ELM renders (startup polling instead of waiting for the SPA's first mutation).
+- ~8x faster KaTeX validation (MathML-only output); no DOM cloning for prose; per-tick UI layout memoization; throttled accent-color sampling.
+
+### UI
+- Viewport position is preserved when toggling the Fixer switch off/on (content-anchored, works with nested scroll containers).
+- Fixer switch label typography now matches ELM's native top-bar controls.
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.3.13.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.4.zip`.
