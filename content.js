@@ -8,6 +8,98 @@
   const PROMPT_PANEL_ID = 'elm-math-fixer-prompt-panel';
   const FIXER_ENABLED_STORAGE_KEY = 'elmMathFixerEnabled';
   let fixerEnabledFallback = true;
+  // Guards toggle-initiated scroll chains against rapid re-clicks: each click
+  // bumps the token and stale rAF callbacks no-op.
+  let toggleScrollToken = 0;
+  // Tolerance (px) for the settled second-pass check and the user-scroll
+  // abandon gate below.
+  const SCROLL_VERIFY_TOLERANCE_PX = 2;
+  const FONTS_READY_TIMEOUT_MS = 800;
+  // Drift beyond this between click-time snapshot and deferred fire counts as
+  // the user having scrolled away (only evaluated while math is quiet, when no
+  // growth explains movement).
+  const CLICK_SNAPSHOT_ABANDON_PX = 8;
+
+  function readScrollerTops(saved) {
+    return (saved?.scrollers || []).map((entry) => {
+      try {
+        return entry.el.scrollTop;
+      } catch {
+        return 0;
+      }
+    });
+  }
+
+  // Click-time scroller snapshot (elements + tops). If deferred content work
+  // fires after the user has meanwhile scrolled — and math is quiet, so no
+  // growth explains the drift — do the content switch without scroll
+  // correction rather than yanking them back to a stale position.
+  function snapshotClickScrollers() {
+    try {
+      const saved = MATH_REPAIR.captureScrollAnchor?.();
+      return (saved?.scrollers || []).map((entry) => {
+        let top = 0;
+        try {
+          top = entry.el.scrollTop;
+        } catch {
+          top = 0;
+        }
+        return { el: entry.el, top };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  function userScrolledSinceClick(clickSnap) {
+    if (!clickSnap || clickSnap.length === 0) return false;
+    // While streaming, drift is ambiguous (growth itself moves tops), so only
+    // evaluate while quiet; otherwise keep the normal fresh-capture path.
+    if (globalThis.ELMMathFixerRuntime?.isMathQuiet?.() === false) return false;
+    for (let i = 0; i < clickSnap.length; i++) {
+      const entry = clickSnap[i];
+      if (!entry.el?.isConnected) continue;
+      let current = 0;
+      try {
+        current = entry.el.scrollTop;
+      } catch {
+        continue;
+      }
+      if (Math.abs(current - entry.top) > CLICK_SNAPSHOT_ABANDON_PX) return true;
+    }
+    return false;
+  }
+
+  // Second-pass verification after the first restore: waits for our own
+  // follow-up scans to settle and fonts to load, then re-applies the same
+  // saved anchor once — unless the user has scrolled meanwhile (abandon
+  // rather than fight them) or a newer click superseded this chain.
+  // Baseline tops are read synchronously at schedule time, i.e. right after
+  // the first restore painted, per the audit requirement.
+  function scheduleSettledScrollVerify(saved, clickToken) {
+    if (!saved) return;
+    const baseline = readScrollerTops(saved);
+    const runtime = globalThis.ELMMathFixerRuntime;
+    const runSettled = runtime?.runWhenScanSettled;
+    const verify = () => {
+      if (clickToken !== toggleScrollToken) return;
+      const current = readScrollerTops(saved);
+      for (let i = 0; i < current.length; i++) {
+        if (Math.abs(current[i] - (baseline[i] || 0)) > SCROLL_VERIFY_TOLERANCE_PX) return;
+      }
+      MATH_REPAIR.restoreScrollAnchor?.(saved);
+    };
+    const withFonts = () => {
+      const fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+      const timeout = new Promise((resolve) => setTimeout(resolve, FONTS_READY_TIMEOUT_MS));
+      Promise.race([fontsReady, timeout]).then(() => {
+        if (clickToken !== toggleScrollToken) return;
+        requestAnimationFrame(() => requestAnimationFrame(verify));
+      });
+    };
+    if (typeof runSettled === 'function') runSettled.call(runtime, withFonts);
+    else setTimeout(withFonts, 750);
+  }
 
   const PROMPT_GROUPS = globalThis.ELMMathFixerPrompts || [];
 
@@ -547,6 +639,14 @@
     toggle.style.bottom = '';
   }
 
+  function isToggleDocked(toggle) {
+    return Boolean(
+      toggle?.isConnected &&
+      toggle.parentElement !== document.body &&
+      !toggle.classList.contains('elm-mf-fallback')
+    );
+  }
+
   function placeFixerToggle(toggle) {
     const leftmost = getLeftmostTopBarControl();
     const leftmostRect = leftmost?.getBoundingClientRect();
@@ -555,9 +655,9 @@
         // The whole anchor row is covered by an overlay. An already docked
         // switch stays put so the overlay hides it like ELM's own controls;
         // only a switch that is not docked yet falls back to compact mode.
-        const isDocked = toggle.parentElement !== document.body &&
-          !toggle.classList.contains('elm-mf-fallback');
-        if (isDocked) return;
+        // isConnected is required: a freshly created (detached) toggle must
+        // never take this path, or it would return before ever being inserted.
+        if (isToggleDocked(toggle)) return;
       } else {
         toggle.classList.remove('elm-mf-fallback', 'elm-mf-compact');
         toggle.style.left = '';
@@ -570,6 +670,11 @@
         }
         return;
       }
+    } else {
+      // No usable top-bar anchor (transient re-render, e.g. streaming
+      // send->stop swap). Keep an already-docked switch in place instead of
+      // bouncing it to compact fallback; only undocked switches fall back.
+      if (isToggleDocked(toggle)) return;
     }
     positionCompactFixerToggle(toggle);
   }
@@ -602,21 +707,65 @@
       toggle.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
+        // Invalidate any in-flight scroll restores from a previous click so
+        // rapid toggles cannot interleave rAF corrections out of order.
+        MATH_REPAIR.cancelPendingRestores?.();
+        const clickToken = ++toggleScrollToken;
         const enabled = !isFixerEnabled();
         setFixerEnabled(enabled);
         updateFixerToggle(toggle);
+        // Click-time scroller snapshot for the deferred-fire guard below.
+        const clickSnap = snapshotClickScrollers();
         // Repaired formulas take different space than raw text, so capture a
         // content anchor at click time and restore the viewport after the
         // transition completes. Only the explicit toggle does this —
         // background scans must never fight the user's scrolling.
-        if (enabled) {
+        // During active streaming the content work waits for quiet (silent
+        // gate, no UI change); the state flip above is already instant.
+        const doEnable = () => {
+          if (clickToken !== toggleScrollToken) return;
+          if (userScrolledSinceClick(clickSnap)) {
+            globalThis.ELMMathFixerRuntime?.scan();
+            return;
+          }
           requestAnimationFrame(() => {
+            if (clickToken !== toggleScrollToken) return;
             const saved = MATH_REPAIR.captureScrollAnchor?.();
             globalThis.ELMMathFixerRuntime?.scan();
-            if (saved) requestAnimationFrame(() => MATH_REPAIR.restoreScrollAnchor?.(saved));
+            if (saved) requestAnimationFrame(() => {
+              if (clickToken !== toggleScrollToken) return;
+              MATH_REPAIR.restoreScrollAnchor?.(saved);
+              scheduleSettledScrollVerify(saved, clickToken);
+            });
           });
+        };
+        const doDisable = () => {
+          if (clickToken !== toggleScrollToken) return;
+          // Toggle-initiated restores run unobserved (see
+          // runtime.runUnobserved): they shuffle original plain nodes that no
+          // filter can tell apart from genuine edits, and must not feed the
+          // streaming quiet gate.
+          const runtime = globalThis.ELMMathFixerRuntime;
+          const restore = (options) => (typeof runtime?.runUnobserved === 'function'
+            ? runtime.runUnobserved(() => restoreAllRescuedMath(options))
+            : restoreAllRescuedMath(options));
+          if (userScrolledSinceClick(clickSnap)) {
+            restore();
+            return;
+          }
+          const saved = restore({
+            preserveScroll: true,
+            onComplete: () => scheduleSettledScrollVerify(saved, clickToken)
+          });
+        };
+        const runWhenQuiet = globalThis.ELMMathFixerRuntime?.runWhenMathQuiet;
+        if (typeof runWhenQuiet === 'function') {
+          // Already quiet => runs synchronously, preserving existing timing.
+          runWhenQuiet.call(globalThis.ELMMathFixerRuntime, enabled ? doEnable : doDisable);
+        } else if (enabled) {
+          doEnable();
         } else {
-          restoreAllRescuedMath({ preserveScroll: true });
+          doDisable();
         }
       });
     }

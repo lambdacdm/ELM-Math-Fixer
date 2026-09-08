@@ -1493,6 +1493,340 @@ async function runWelcomePageTest(browser) {
   return result;
 }
 
+async function runStreamingToggleTests(browser) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
+  await page.setContent(`<!doctype html><html><head><style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; }
+    header { align-items: center; background: #e5e5e5; display: flex; height: 92px; justify-content: space-between; padding: 0 30px; }
+    .right { align-items: center; display: flex; gap: 10px; }
+    .right button { height: 40px; }
+    main.markdown { padding: 10px 30px 200px; }
+    .composer { align-items: center; background: #ddd; bottom: 0; display: flex; gap: 8px; height: 56px; justify-content: flex-end; padding: 0 16px; position: fixed; width: 100%; }
+    .composer button { height: 34px; }
+  </style></head><body>
+    <header><button id="tools">Tools</button><div class="right" id="top-bar-right"><button id="chat-icon">Chat</button><button id="api-key">Request an ELM API Key</button></div></header>
+    <main class="markdown" id="stream-main"><p>History: $x_1 + y_2$.</p><p>Filler one.</p><p>Filler two.</p></main>
+    <div class="composer"><button id="composer-send">Send</button></div>
+  </body></html>`);
+  await loadContentScripts(page);
+  await page.waitForTimeout(600);
+
+  const docked = await page.evaluate(() => {
+    const toggle = document.querySelector('#elm-math-fixer-toggle');
+    return {
+      connected: Boolean(toggle?.isConnected),
+      parent: toggle?.parentElement?.id || null,
+      next: toggle?.nextElementSibling?.id || null
+    };
+  });
+  assert(docked.connected && docked.parent === 'top-bar-right' && docked.next === 'chat-icon',
+    'streaming test did not start with a docked Fixer switch');
+
+  // Single burst must stay immediate: one append then toggle off restores quickly.
+  await page.evaluate(() => {
+    const p = document.createElement('p');
+    p.id = 'burst-math';
+    p.textContent = 'Burst: $a_1 + b_2$.';
+    document.querySelector('#stream-main').appendChild(p);
+  });
+  await page.waitForTimeout(600);
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  await page.waitForTimeout(600);
+  const burstOff = await page.evaluate(() => ({
+    enabled: globalThis.ELMMathFixerUI.isFixerEnabled(),
+    blocks: document.querySelectorAll('#stream-main .elm-math-rescued-block, #stream-main .elm-math-rescued-wrapper').length
+  }));
+  assert(burstOff.enabled === false, 'single-burst toggle off did not flip state instantly');
+  assert(burstOff.blocks === 0, 'single-burst toggle off was wrongly deferred by the quiet gate');
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  await page.waitForTimeout(800);
+
+  // Sustained streaming: rapid token growth + top-bar send->stop swap mid-stream,
+  // toggle off mid-stream. State must flip instantly; content restore waits for
+  // quiet; the switch must never detach or bounce into the composer.
+  await page.evaluate(async () => {
+    const main = document.querySelector('#stream-main');
+    globalThis.__elmStreamDone = false;
+    (async () => {
+      for (let i = 0; i < 10; i++) {
+        const p = document.createElement('p');
+        p.className = 'stream-chunk';
+        p.textContent = `Stream chunk ${i}: $s_${i} + t_${i}$ with filler text to grow the page.`;
+        main.appendChild(p);
+        if (i === 4) {
+          document.querySelector('#composer-send')?.remove();
+          const stop = document.createElement('button');
+          stop.id = 'composer-stop';
+          stop.textContent = 'Stop';
+          document.querySelector('.composer').appendChild(stop);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      globalThis.__elmStreamDone = true;
+    })();
+  });
+  await page.waitForTimeout(550);
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  const midStream = await page.evaluate(() => ({
+    enabled: globalThis.ELMMathFixerUI.isFixerEnabled(),
+    connected: Boolean(document.querySelector('#elm-math-fixer-toggle')?.isConnected),
+    inComposer: Boolean(document.querySelector('#elm-math-fixer-toggle')?.closest('.composer'))
+  }));
+  assert(midStream.enabled === false, 'streaming toggle off did not flip state instantly');
+  assert(midStream.connected && !midStream.inComposer,
+    'Fixer switch detached or bounced into the composer during streaming re-render');
+  await page.waitForFunction(() => globalThis.__elmStreamDone === true, null, { timeout: 10000 });
+  await page.waitForTimeout(2600);
+  const afterQuiet = await page.evaluate(() => ({
+    enabled: globalThis.ELMMathFixerUI.isFixerEnabled(),
+    connected: Boolean(document.querySelector('#elm-math-fixer-toggle')?.isConnected),
+    parent: document.querySelector('#elm-math-fixer-toggle')?.parentElement?.id || null,
+    inComposer: Boolean(document.querySelector('#elm-math-fixer-toggle')?.closest('.composer')),
+    blocks: document.querySelectorAll('#stream-main .elm-math-rescued-block').length,
+    wrappers: document.querySelectorAll('#stream-main .elm-math-rescued-wrapper').length,
+    chains: document.querySelectorAll('#stream-main .elm-math-local-chain').length
+  }));
+  assert(afterQuiet.connected && afterQuiet.parent === 'top-bar-right' && !afterQuiet.inComposer,
+    'Fixer switch did not stay docked across streaming and top-bar swap');
+  assert(afterQuiet.blocks === 0 && afterQuiet.wrappers === 0 && afterQuiet.chains === 0,
+    'streaming toggle off did not restore the original DOM after quiet');
+
+  // Rapid re-click guard: off->on quickly ends in the last state with content matching.
+  await page.evaluate(() => {
+    document.querySelector('#elm-math-fixer-toggle').click();
+    document.querySelector('#elm-math-fixer-toggle').click();
+  });
+  await page.waitForTimeout(2500);
+  const rapid = await page.evaluate(() => ({
+    enabled: globalThis.ELMMathFixerUI.isFixerEnabled(),
+    blocks: document.querySelectorAll('#stream-main .elm-math-rescued-block').length,
+    wrappers: document.querySelectorAll('#stream-main .elm-math-rescued-wrapper').length
+  }));
+  assert(rapid.enabled === false && rapid.blocks === 0 && rapid.wrappers === 0,
+    'rapid double toggle did not settle on the last (off) state with restored DOM');
+
+  await page.close();
+  return { docked: docked.parent, afterQuietParent: afterQuiet.parent };
+}
+
+async function runScrollPinTests(browser) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
+  let paragraphs = '';
+  for (let i = 0; i < 24; i++) {
+    paragraphs += `<p id="pin-p${i}">Message ${i}: $$a_{${i}} + b_{${i}} = c_{${i}}$$ tail text to fill the line.</p>`;
+  }
+  await page.setContent(`<!doctype html><html><head><style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; }
+    header { align-items: center; background: #e5e5e5; display: flex; height: 92px; justify-content: space-between; padding: 0 30px; }
+    .right { align-items: center; display: flex; gap: 10px; }
+    .right button { height: 40px; }
+    #chat-scroll { height: 300px; margin: 10px 30px; overflow-y: auto; border: 1px solid #ccc; }
+    #chat-scroll .markdown { padding: 8px; }
+    #chat-scroll p { margin: 10px 0; }
+  </style></head><body>
+    <header><button id="tools">Tools</button><div class="right" id="top-bar-right"><button id="chat-icon">Chat</button><button id="api-key">Request an ELM API Key</button></div></header>
+    <div id="chat-scroll"><main class="markdown" id="pin-main">${paragraphs}</main></div>
+  </body></html>`);
+  await loadContentScripts(page);
+  await page.waitForTimeout(900);
+
+  const remaining = () => page.evaluate(() => {
+    const scroller = document.querySelector('#chat-scroll');
+    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+  });
+
+  // Start from ON (repaired), pin to bottom, toggle OFF then ON: must re-pin.
+  await page.evaluate(() => document.querySelector('#chat-scroll').scrollTop =
+    document.querySelector('#chat-scroll').scrollHeight);
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  await page.waitForTimeout(2600);
+  let bottomOff = await remaining();
+  assert(bottomOff <= 40, `bottom pin lost after toggle off: ${bottomOff}px from bottom`);
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  // Simulate a late settle scan landing after the first restore.
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    const p = document.createElement('p');
+    p.id = 'pin-late';
+    p.textContent = 'Late: $l_1 + l_2$.';
+    document.querySelector('#pin-main').appendChild(p);
+  });
+  await page.waitForTimeout(2600);
+  let bottomOn = await remaining();
+  assert(bottomOn <= 40, `bottom pin lost after toggle on + late growth: ${bottomOn}px from bottom`);
+
+  // Center-reading: anchor paragraph must stay in view across a toggle.
+  const centerId = await page.evaluate(() => {
+    const scroller = document.querySelector('#chat-scroll');
+    scroller.scrollTop = Math.floor((scroller.scrollHeight - scroller.clientHeight) / 2);
+    const rect = scroller.getBoundingClientRect();
+    const el = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const p = el?.closest?.('p');
+    return p?.id || null;
+  });
+  assert(centerId, 'could not find a center anchor paragraph');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  await page.waitForTimeout(2600);
+  const centerVisible = await page.evaluate((id) => {
+    const scroller = document.querySelector('#chat-scroll');
+    const target = document.getElementById(id);
+    if (!target) return false;
+    const s = scroller.getBoundingClientRect();
+    const r = target.getBoundingClientRect();
+    return r.bottom >= s.top - 40 && r.top <= s.bottom + 40;
+  }, centerId);
+  assert(centerVisible, `center anchor ${centerId} left the viewport after toggle`);
+
+  // Short content: barely scrollable before repair must not count as
+  // bottom-following; a top-anchored reader stays at top across off->on even
+  // though the repaired height grows the scroll range.
+  await page.evaluate(() => {
+    let html = '';
+    for (let i = 0; i < 6; i++) {
+      html += `<p id="short-p${i}">Short ${i}: $$s_{${i}} + t_{${i}} = u_{${i}}$$ end.</p>`;
+    }
+    document.querySelector('#pin-main').innerHTML = html;
+    document.querySelector('#chat-scroll').scrollTop = 0;
+  });
+  await page.waitForTimeout(900);
+  const shortBefore = await page.evaluate(() => {
+    const scroller = document.querySelector('#chat-scroll');
+    return {
+      max: scroller.scrollHeight - scroller.clientHeight,
+      top: scroller.scrollTop,
+      enabled: globalThis.ELMMathFixerUI.isFixerEnabled()
+    };
+  });
+  assert(shortBefore.max <= 40 && shortBefore.top === 0,
+    `short-content fixture invalid: max=${shortBefore.max}, top=${shortBefore.top}`);
+  // Normalize to OFF first (repairs cleared), then top-anchored OFF->ON.
+  await page.evaluate(() => {
+    if (globalThis.ELMMathFixerUI.isFixerEnabled()) {
+      document.querySelector('#elm-math-fixer-toggle').click();
+    }
+  });
+  await page.waitForTimeout(2600);
+  await page.evaluate(() => {
+    document.querySelector('#chat-scroll').scrollTop = 0;
+    if (!globalThis.ELMMathFixerUI.isFixerEnabled()) {
+      document.querySelector('#elm-math-fixer-toggle').click();
+    }
+  });
+  await page.waitForTimeout(2600);
+  const shortAfter = await page.evaluate(() => {
+    const scroller = document.querySelector('#chat-scroll');
+    return {
+      max: scroller.scrollHeight - scroller.clientHeight,
+      top: scroller.scrollTop,
+      wrappers: document.querySelectorAll('#pin-main .elm-math-rescued-wrapper').length
+    };
+  });
+  assert(shortAfter.max > 120,
+    `short-content fixture did not grow a scroll range: max=${shortAfter.max}`);
+  assert(shortAfter.wrappers > 0, 'short content was not repaired on toggle on');
+  assert(shortAfter.top <= 40,
+    `short content yanked from top on toggle on: scrollTop=${shortAfter.top}, max=${shortAfter.max}`);
+
+  await page.close();
+  return { centerId, bottomOn };
+}
+
+async function runToggleGateTests(browser) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
+  let paragraphs = '';
+  for (let i = 0; i < 12; i++) {
+    paragraphs += `<p id="gate-p${i}">Gate ${i}: $$g_{${i}} + h_{${i}} = k_{${i}}$$ filler text here.</p>`;
+  }
+  await page.setContent(`<!doctype html><html><head><style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; }
+    header { align-items: center; background: #e5e5e5; display: flex; height: 92px; justify-content: space-between; padding: 0 30px; }
+    .right { align-items: center; display: flex; gap: 10px; }
+    .right button { height: 40px; }
+    #gate-scroll { height: 300px; margin: 10px 30px; overflow-y: auto; border: 1px solid #ccc; }
+    #gate-scroll .markdown { padding: 8px; }
+    #gate-scroll p { margin: 10px 0; }
+  </style></head><body>
+    <header><button id="tools">Tools</button><div class="right" id="top-bar-right"><button id="chat-icon">Chat</button><button id="api-key">Request an ELM API Key</button></div></header>
+    <div id="gate-scroll"><main class="markdown" id="gate-main">${paragraphs}</main></div>
+  </body></html>`);
+  await loadContentScripts(page);
+  await page.waitForTimeout(900);
+
+  // 1. Our own toggle-off teardown must not trip the quiet gate.
+  const quietBefore = await page.evaluate(() => globalThis.ELMMathFixerRuntime.isMathQuiet());
+  assert(quietBefore === true, 'gate test did not start quiet');
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  await page.waitForTimeout(450);
+  const quietAfterOff = await page.evaluate(() => ({
+    quiet: globalThis.ELMMathFixerRuntime.isMathQuiet(),
+    blocks: document.querySelectorAll('#gate-main .elm-math-rescued-block').length,
+    wrappers: document.querySelectorAll('#gate-main .elm-math-rescued-wrapper').length
+  }));
+  assert(quietAfterOff.quiet === true, 'toggle-off teardown polluted the quiet gate');
+  assert(quietAfterOff.blocks === 0 && quietAfterOff.wrappers === 0, 'toggle off did not restore');
+
+  // 2. Re-enable must act immediately, not deferred ~1.5s by a stale gate.
+  await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+  await page.waitForTimeout(700);
+  const immediateOn = await page.evaluate(() => ({
+    enabled: globalThis.ELMMathFixerUI.isFixerEnabled(),
+    wrappers: document.querySelectorAll('#gate-main .elm-math-rescued-wrapper').length
+  }));
+  assert(immediateOn.enabled === true && immediateOn.wrappers > 0,
+    'toggle on was deferred by a stale quiet gate');
+
+  // 3. Alternating cycles preserve position with pin-aware invariants:
+  // top-pinned stays at top, bottom-pinned stays at bottom, middle keeps the
+  // captured anchor at its viewport offset. (ON/OFF legitimately changes total
+  // height, so a fixed paragraph cannot stay put in all cases.)
+  for (let cycle = 0; cycle < 5; cycle++) {
+    const before = await page.evaluate(() => {
+      const scroller = document.querySelector('#gate-scroll');
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      const saved = globalThis.ELMMathFixerRepair.captureScrollAnchor();
+      return {
+        top: Math.round(scroller.scrollTop),
+        remaining: Math.round(max - scroller.scrollTop),
+        max: Math.round(max),
+        anchorId: saved?.anchor.id || null,
+        anchorTop: saved ? Math.round(saved.anchor.getBoundingClientRect().top) : null
+      };
+    });
+    assert(before.anchorId, `could not capture an anchor before toggle cycle ${cycle}`);
+    const mode = before.top <= 40 ? 'top' : (before.max > 120 && before.remaining <= 40 ? 'bottom' : 'middle');
+    await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
+    await page.waitForTimeout(650);
+    const check = await page.evaluate((args) => {
+      const scroller = document.querySelector('#gate-scroll');
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      const out = { top: Math.round(scroller.scrollTop), remaining: Math.round(max - scroller.scrollTop) };
+      if (args.mode === 'middle') {
+        const target = document.getElementById(args.anchorId);
+        out.missing = !target;
+        if (target) out.anchorTop = Math.round(target.getBoundingClientRect().top);
+      }
+      return out;
+    }, { mode, anchorId: before.anchorId });
+    if (mode === 'top') {
+      assert(check.top <= 40, `top pin lost after toggle cycle ${cycle}: scrollTop=${check.top}`);
+    } else if (mode === 'bottom') {
+      assert(check.remaining <= 40, `bottom pin lost after toggle cycle ${cycle}: ${check.remaining}px from bottom`);
+    } else {
+      assert(!check.missing, `anchor ${before.anchorId} detached after toggle cycle ${cycle}`);
+      assert(Math.abs(check.anchorTop - before.anchorTop) <= 80,
+        `anchor ${before.anchorId} moved ${before.anchorTop}->${check.anchorTop} across toggle cycle ${cycle}`);
+    }
+  }
+
+  await page.close();
+  return { anchorId: 'pin-aware-per-cycle' };
+}
+
 (async () => {
   const executablePath = findChrome();
   if (!executablePath) throw new Error('Chrome was not found. Set CHROME_PATH to run browser tests.');
@@ -1503,6 +1837,9 @@ async function runWelcomePageTest(browser) {
     const modern = await runModernUiTest(browser);
     const noControls = await runNoTopBarControlsTest(browser);
     const welcome = await runWelcomePageTest(browser);
+    const streaming = await runStreamingToggleTests(browser);
+    const scrollPin = await runScrollPinTests(browser);
+    const gate = await runToggleGateTests(browser);
     console.log(`Browser tests passed: ${JSON.stringify({
       setext: result.initial.setextReason,
       splitBlocks: result.initial.splitBlocks,
@@ -1512,7 +1849,11 @@ async function runWelcomePageTest(browser) {
       toggleBeforeChatIcon: modern.wide.toggleBeforeChatIcon,
       compactFixer: modern.narrow.powerVisible,
       fallbackToggle: noControls.compact,
-      welcomeDocked: welcome.toggleNext === 'chat-icon'
+      welcomeDocked: welcome.toggleNext === 'chat-icon',
+      streamingDocked: streaming.afterQuietParent,
+      scrollPinBottom: scrollPin.bottomOn,
+      scrollPinCenter: scrollPin.centerId,
+      toggleGateAnchor: gate.anchorId
     })}`);
   } finally {
     await browser.close();

@@ -1,25 +1,15 @@
-# ELM Math Fixer v1.4
+# ELM Math Fixer v1.4.1
 
-## Summary of changes since v1.3
+## What's New since v1.4
 
-v1.4 is a consolidation release: it rolls up all fixes and improvements from the v1.3.1–v1.3.13 patch series with no additional changes.
-
-### Math rendering repairs
-- Rebuilds display math (`$$…$$`) split across paragraphs/headings, including standalone `=`/`-` consumed as Setext markers and damaged subscripts.
-- Repairs emphasis-damaged math: `_…_` eaten into `<em>`, including groups spanning a display/inline boundary and `\operatorname{…}_{…}` with a swallowed closing brace.
-- Repairs `<br>`-split formulas inside a single paragraph (e.g. blockquote `$$<br>…<br>$$`).
-- Repairs mispaired native inline math and doubled escaped set braces in native KaTeX.
-- Restores eaten `\[ … \]` / `\( … \)` delimiters and bare-paren inline math.
-- Guards: rejects empty rendered displays; idempotency guard stops repair/restore ping-pong (no more flicker or selection loss).
-
-### Performance
-- Fixer switch appears as soon as ELM renders (startup polling instead of waiting for the SPA's first mutation).
-- ~8x faster KaTeX validation (MathML-only output); no DOM cloning for prose; per-tick UI layout memoization; throttled accent-color sampling.
-
-### UI
-- Viewport position is preserved when toggling the Fixer switch off/on (content-anchored, works with nested scroll containers).
-- Fixer switch label typography now matches ELM's native top-bar controls.
+### Fixes
+- **Fixer switch stays put during streaming** (v1.4.1): the switch no longer disappears or bounces into compact mode when ELM re-renders the top bar mid-stream (e.g. the send-to-stop swap). An already-docked switch keeps its position, and a freshly created one can no longer take an early-return path that left it detached.
+- **Toggling during streaming no longer jumps the page** (v1.4.1): scroll-correcting restores now wait for a short quiet window after sustained math-content growth (single bursts still apply instantly). The on/off state itself still flips instantly; only the viewport correction is deferred and applied once.
+- **Bottom- and top-following readers stay put** (v1.4.1): restores re-pin a bottom-following scroller to the new maximum (only when the scroll range is meaningful) and keep a top-anchored reader at the top, instead of chasing a viewport-center anchor that growth below has pushed away.
+- **Settled second-pass correction** (v1.4.1): after the first restore, the same saved anchor is re-applied once follow-up scans settle and fonts load (with a timeout fallback). The pass is skipped if you scrolled meanwhile or clicked again, so it never fights you.
+- **No more double-counted corrections** (v1.4.1): restores now adjust from the current scroll position, since the browser may already have auto-clamped or anchor-adjusted it between capture and restore. Using the stale pre-transition value overshot straight into the clamp.
+- **Own teardown no longer trips the streaming gate** (v1.4.1): toggle-initiated repairs/restores run with the page observer disconnected and dismantled repair DOM no longer counts as page growth, so one toggle can never defer the next toggle's work.
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.4.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.4.1.zip`.

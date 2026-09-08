@@ -1379,6 +1379,13 @@
 
   let restoreToken = 0;
 
+  // Invalidates pending rAF scroll restores (rapid toggle clicks, streaming
+  // mutations). restoreAllRescuedMath already guards its phases with the same
+  // token; toggle-initiated scroll chains check it via content.js local token.
+  function cancelPendingRestores() {
+    ++restoreToken;
+  }
+
   // Scroll-position preservation across toggle off/on. Repaired formulas take
   // different space than raw text, so absolute scrollTop values are meaningless
   // after a transition; instead we pin the viewport to a stable content
@@ -1387,6 +1394,18 @@
   const SCROLL_ANCHOR_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, td, th';
   const SCROLL_ANCHOR_SKIP_SELECTOR =
     '#elm-math-fixer-toggle, #elm-math-fixer-prompt-button, #elm-math-fixer-prompt-panel';
+  // A scroller within this distance of its maximum counts as pinned to the
+  // bottom (chat follow mode). Restores re-pin instead of anchor-correcting.
+  const BOTTOM_PIN_TOLERANCE_PX = 40;
+  // Pinned mode additionally requires a meaningful scroll range: barely
+  // scrollable content (max within tolerance even at the top) must not count
+  // as bottom-following, or enabling repairs would yank a top-anchored reader
+  // to the grown maximum. Such scrollers use the anchor-delta path (≈0 move).
+  const MIN_PINNABLE_RANGE_PX = 120;
+  // Symmetric top pin: a reader at/near the very top stays there. Anchoring to
+  // a viewport-center element instead would scroll them down whenever content
+  // between the top and that element grows — the exact short-content yank.
+  const TOP_PIN_TOLERANCE_PX = 40;
 
   function isScrollableElement(el) {
     const style = getComputedStyle(el);
@@ -1479,11 +1498,33 @@
     }
     if (!anchor || !anchor.isConnected) return null;
 
+    // Pinning to the growing tail races with streaming appends: when the anchor
+    // is the last visible block of its parent, prefer the previous stable
+    // sibling. Static content is unaffected (second-last vs last is equivalent).
+    const anchorParent = anchor.parentElement;
+    if (anchorParent) {
+      const visibleSiblings = Array.from(anchorParent.children).filter(
+        (sib) => sib.matches?.(SCROLL_ANCHOR_SELECTOR) &&
+          sib.getBoundingClientRect().height > 0 &&
+          !sib.closest('.elm-math-split-original')
+      );
+      if (visibleSiblings.length > 1 && visibleSiblings[visibleSiblings.length - 1] === anchor) {
+        anchor = visibleSiblings[visibleSiblings.length - 2];
+      }
+    }
+
     const scrollers = collectPotentialScrollers(anchor)
       .map((el) => {
         const anchorRect = anchor.getBoundingClientRect();
         const elRect = el.getBoundingClientRect();
-        return { el, anchorOffset: anchorRect.top - elRect.top, scrollTop: el.scrollTop };
+        const max = el.scrollHeight - el.clientHeight;
+        return {
+          el,
+          anchorOffset: anchorRect.top - elRect.top,
+          scrollTop: el.scrollTop,
+          pinnedToBottom: max > MIN_PINNABLE_RANGE_PX && max - el.scrollTop <= BOTTOM_PIN_TOLERANCE_PX,
+          pinnedToTop: el.scrollTop <= TOP_PIN_TOLERANCE_PX
+        };
       });
     return { anchor, scrollers };
   }
@@ -1531,17 +1572,37 @@
     for (const savedScroller of unionScrollers) {
       const el = savedScroller.el;
       if (!el.isConnected) continue;
+      const savedEntry = saved.scrollers.find((s) => s.el === el);
+      if (savedEntry?.pinnedToTop) {
+        // Nothing above the viewport can have meaningfully shifted (at most a
+        // tolerance worth of content sits above); keep the top stable instead
+        // of chasing a center anchor that growth below has pushed down.
+        const max = el.scrollHeight - el.clientHeight;
+        const target = Math.max(0, Math.min(savedEntry.scrollTop, max));
+        if (Math.abs(el.scrollTop - target) >= 1) el.scrollTop = target;
+        continue;
+      }
+      if (savedEntry?.pinnedToBottom) {
+        const max = el.scrollHeight - el.clientHeight;
+        const target = Math.max(0, max);
+        if (Math.abs(el.scrollTop - target) >= 1) el.scrollTop = target;
+        continue;
+      }
       // Re-find fresh anchor position for this scroller (anchor may have moved)
       const anchorRect = anchor.getBoundingClientRect();
       const elRect = el.getBoundingClientRect();
       const currentOffset = anchorRect.top - elRect.top;
       // Use saved offset if available, otherwise treat as 0 delta (fresh scroller)
-      const savedEntry = saved.scrollers.find((s) => s.el === el);
       const savedOffset = savedEntry ? savedEntry.anchorOffset : currentOffset;
       const delta = currentOffset - savedOffset;
       if (Math.abs(delta) < 1) continue;
       const max = el.scrollHeight - el.clientHeight;
-      el.scrollTop = Math.max(0, Math.min((savedEntry ? savedEntry.scrollTop : el.scrollTop) + delta, max));
+      // Adjust from the CURRENT scrollTop: the browser may have auto-clamped
+      // or native-anchor-adjusted scrollTop between capture and now (a shrink
+      // below the old scrollTop clamps immediately, before our rAF runs).
+      // Using the stale saved scrollTop here would double-count that
+      // adjustment and overshoot into the clamp.
+      el.scrollTop = Math.max(0, Math.min(el.scrollTop + delta, max));
     }
   }
 
@@ -1633,6 +1694,10 @@
     }
 
     runPhase(0);
+    // Returned for the toggle's settled second-pass verification (same saved
+    // anchor re-applied after fonts/settle scans finish). Ignored by callers
+    // that do not need it.
+    return savedScroll;
   }
 
   function getAffectedMathElements(container, children, affectedRoots) {
@@ -2064,6 +2129,7 @@
     processContainer,
     restoreAllRescuedMath,
     captureScrollAnchor,
-    restoreScrollAnchor
+    restoreScrollAnchor,
+    cancelPendingRestores
   };
 })();
