@@ -263,6 +263,26 @@
     /support/i
   ];
 
+  // Body content must never supply top bar anchors. Search results, answer
+  // lists and other markdown content sit in the top half of the viewport on
+  // first paint and easily satisfy the geometric top bar filters, so exclude
+  // them structurally instead of relying on geometry alone. A banner can push
+  // the real top bar down, so no vertical threshold is applied here.
+  const CONTENT_EXCLUDE_SELECTOR = `${CONTAINER_SELECTOR}, main, article, ul, ol, li, p, td, th`;
+
+  function getTopBarAnchorText(control) {
+    return `${control.textContent || ''} ${control.getAttribute?.('aria-label') || ''}`.trim();
+  }
+
+  function matchesTopBarAnchor(control) {
+    const text = getTopBarAnchorText(control);
+    return TOP_BAR_ANCHOR_PATTERNS.some((pattern) => pattern.test(text));
+  }
+
+  function isContentControl(control) {
+    return Boolean(control.closest?.(CONTENT_EXCLUDE_SELECTOR));
+  }
+
   // A banner above the top bar pushes the top bar down and adds its own
   // controls (e.g. a dismiss button). Cluster candidate controls into rows by
   // vertical position, then prefer the row containing a known top bar label;
@@ -281,6 +301,12 @@
       document.querySelectorAll('button, a, [role="button"], [role="switch"], input[type="checkbox"], mat-slide-toggle, .mat-slide-toggle')
     ).filter((control) => {
       if (isExtensionToolbarControl(control) || !isVisible(control)) return false;
+      // Body content links (e.g. search result lists) must never anchor the
+      // top bar placement, even when they satisfy the geometric filters.
+      if (isContentControl(control)) return false;
+      // A bare link is only a top bar control when it carries a known top bar
+      // label (e.g. Support); prose links never qualify.
+      if (control.tagName === 'A' && !matchesTopBarAnchor(control)) return false;
       const rect = control.getBoundingClientRect();
       if (!(isInTopBarRegion(rect) && rect.height >= 20 && rect.height <= 64 && rect.left > window.innerWidth * 0.38)) {
         return false;
@@ -307,15 +333,19 @@
     let topBarBand = null;
     for (const pattern of TOP_BAR_ANCHOR_PATTERNS) {
       const matches = viableBands.filter((band) =>
-        band.controls.some((control) => pattern.test((control.textContent || '').trim()))
+        band.controls.some((control) => pattern.test(getTopBarAnchorText(control)))
       );
       if (matches.length > 0) {
         topBarBand = matches.sort((a, b) => b.controls.length - a.controls.length || a.top - b.top)[0];
         break;
       }
     }
+    // No band carries a known top bar label: there is no explicit top bar to
+    // dock against. Fall back to compact positioning instead of electing the
+    // largest unrelated row (e.g. a search result list), which previously
+    // dragged the Fixer switch into body content and pinned it there.
     if (!topBarBand) {
-      topBarBand = viableBands.sort((a, b) => b.controls.length - a.controls.length || a.top - b.top)[0];
+      return [];
     }
 
     // Menus and dialogs (e.g. the model picker) can cover part of the top bar
@@ -639,7 +669,12 @@
     toggle.style.bottom = '';
   }
 
+  function isToggleMisdocked(toggle) {
+    return Boolean(toggle?.isConnected && toggle.closest?.(CONTENT_EXCLUDE_SELECTOR));
+  }
+
   function isToggleDocked(toggle) {
+    if (isToggleMisdocked(toggle)) return false;
     return Boolean(
       toggle?.isConnected &&
       toggle.parentElement !== document.body &&
@@ -648,8 +683,16 @@
   }
 
   function placeFixerToggle(toggle) {
+    // Self-heal a previously misdocked switch: if an older version inserted it
+    // into body content, undock it now so this tick re-docks or falls back.
+    if (isToggleMisdocked(toggle)) {
+      document.body.appendChild(toggle);
+    }
     const leftmost = getLeftmostTopBarControl();
-    const leftmostRect = leftmost?.getBoundingClientRect();
+    // Defensive: a top bar anchor must never live inside body content. Treat
+    // it as missing so the switch falls back instead of docking into prose.
+    const usableLeftmost = leftmost && !isContentControl(leftmost) ? leftmost : null;
+    const leftmostRect = usableLeftmost?.getBoundingClientRect();
     if (leftmostRect && isInTopBarRegion(leftmostRect)) {
       if (isAnchorCoveredByOverlay(leftmostRect)) {
         // The whole anchor row is covered by an overlay. An already docked
@@ -664,9 +707,9 @@
         toggle.style.top = '';
         toggle.style.right = '';
         toggle.style.bottom = '';
-        const parent = leftmost.parentElement;
-        if (toggle.parentElement !== parent || toggle.nextSibling !== leftmost) {
-          parent.insertBefore(toggle, leftmost);
+        const parent = usableLeftmost.parentElement;
+        if (toggle.parentElement !== parent || toggle.nextSibling !== usableLeftmost) {
+          parent.insertBefore(toggle, usableLeftmost);
         }
         return;
       }

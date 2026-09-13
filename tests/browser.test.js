@@ -1323,7 +1323,7 @@ async function runModernUiTest(browser) {
 
   await page.evaluate(() => document.querySelector('#elm-math-fixer-prompt-button').click());
   const copyButtons = await page.locator('#elm-math-fixer-prompt-panel .elm-mf-copy').count();
-  assert(copyButtons === 4, 'prompt catalog did not load in the modern UI');
+  assert(copyButtons === 2, 'prompt catalog did not load in the modern UI');
 
   await page.evaluate(() => document.querySelector('#elm-math-fixer-toggle').click());
   const offSymbol = await page.evaluate(() =>
@@ -1387,6 +1387,86 @@ async function runNoTopBarControlsTest(browser) {
     'without top bar controls the Fixer switch was inserted into the chat input bar');
   assert(!result.inBanner,
     'a lone banner dismiss control was treated as a top bar anchor');
+  await page.close();
+  return result;
+}
+
+async function runSearchResultsAnchorTest(browser) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
+  await page.setContent(`<!doctype html><html><head><style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; }
+    header { align-items: center; background: #e5e5e5; display: flex; height: 92px; justify-content: space-between; padding: 0 30px; }
+    .right { align-items: center; display: flex; gap: 10px; }
+    .right button { height: 40px; }
+    main.markdown { padding: 10px 30px 200px 560px; }
+    main.markdown ul { list-style: disc; margin: 8px 0; padding-left: 20px; }
+    main.markdown li { line-height: 28px; }
+    main.markdown li a { display: inline-block; height: 24px; line-height: 24px; }
+    .composer { background: #ddd; bottom: 0; height: 56px; position: fixed; width: 100%; }
+    .composer textarea { height: 40px; width: 100%; }
+  </style></head><body>
+    <header><button id="tools">Tools</button><div class="right" id="top-bar-right"><button id="chat-icon">Chat</button><button id="api-key">Request an ELM API Key</button><button id="responsible-ai">Responsible AI</button><button id="support">Support</button></div></header>
+    <main class="markdown" id="search-main"><p>Search results used for answer:</p><ul id="search-results"><li><a href="https://example.com/1">ag.algebraic geometry - Tannakian de Rham fundamental group</a></li><li><a href="https://example.com/2">arXiv:1303.6484v6 [math.NT] 24 Jan 2017</a></li><li><a href="https://example.com/3">Tannaka duality revisited</a></li><li><a href="https://example.com/4">Tannaka-Krein duality</a></li></ul></main>
+    <div class="composer"><textarea>Ask anything...</textarea></div>
+  </body></html>`);
+  await loadContentScripts(page);
+  await page.waitForTimeout(600);
+
+  const state = () => page.evaluate(() => {
+    const toggle = document.querySelector('#elm-math-fixer-toggle');
+    return {
+      missing: !toggle,
+      parent: toggle?.parentElement?.id || toggle?.parentElement?.tagName,
+      next: toggle?.nextElementSibling?.id || null,
+      inContent: Boolean(toggle?.closest('main, article, ul, ol, li, p')),
+      inMarkdown: Boolean(toggle?.closest('.markdown')),
+      compact: Boolean(toggle?.classList.contains('elm-mf-compact')),
+      fallback: Boolean(toggle?.classList.contains('elm-mf-fallback'))
+    };
+  });
+
+  // Search result links sit in the top half of the viewport and satisfy the
+  // old geometric filters; they must never win the top bar anchor vote.
+  let result = await state();
+  assert(!result.missing, 'search results page did not create the Fixer switch');
+  assert(result.parent === 'top-bar-right' && result.next === 'chat-icon',
+    'search result links hijacked the Fixer switch anchor');
+  assert(!result.inContent && !result.inMarkdown && !result.compact && !result.fallback,
+    'Fixer switch docked into body content instead of the top bar');
+
+  // A previously misdocked switch (e.g. inserted by an older version into a
+  // search result item) must heal back to the top bar on the next scan.
+  await page.evaluate(() => {
+    const toggle = document.querySelector('#elm-math-fixer-toggle');
+    const victim = document.querySelector('#search-results li:nth-child(2) a');
+    victim.parentElement.insertBefore(toggle, victim);
+  });
+  await page.waitForTimeout(800);
+  result = await state();
+  assert(result.parent === 'top-bar-right' && !result.inContent && !result.inMarkdown,
+    'a misdocked Fixer switch did not heal back to the top bar');
+
+  // Without an explicit top bar label row, content links must never be
+  // elected as the anchor: the switch either keeps its existing docked spot
+  // (transient re-render preservation) or falls back to compact, but it must
+  // not move into the results list.
+  await page.evaluate(() => {
+    document.querySelector('#api-key')?.remove();
+    document.querySelector('#responsible-ai')?.remove();
+    document.querySelector('#support')?.remove();
+    document.querySelector('#chat-icon')?.remove();
+    const solo = document.createElement('button');
+    solo.id = 'solo-tool';
+    solo.style.height = '40px';
+    solo.textContent = 'Tools';
+    document.querySelector('#top-bar-right').appendChild(solo);
+  });
+  await page.waitForTimeout(800);
+  result = await state();
+  assert(!result.inContent && !result.inMarkdown,
+    'content links were elected as the top bar anchor without an explicit label');
+
   await page.close();
   return result;
 }
@@ -1836,6 +1916,7 @@ async function runToggleGateTests(browser) {
     const result = await runMathRepairTests(browser);
     const modern = await runModernUiTest(browser);
     const noControls = await runNoTopBarControlsTest(browser);
+    const searchAnchor = await runSearchResultsAnchorTest(browser);
     const welcome = await runWelcomePageTest(browser);
     const streaming = await runStreamingToggleTests(browser);
     const scrollPin = await runScrollPinTests(browser);
@@ -1849,6 +1930,7 @@ async function runToggleGateTests(browser) {
       toggleBeforeChatIcon: modern.wide.toggleBeforeChatIcon,
       compactFixer: modern.narrow.powerVisible,
       fallbackToggle: noControls.compact,
+      searchAnchorParent: searchAnchor.parent,
       welcomeDocked: welcome.toggleNext === 'chat-icon',
       streamingDocked: streaming.afterQuietParent,
       scrollPinBottom: scrollPin.bottomOn,

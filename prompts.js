@@ -23,28 +23,6 @@ Also use only LaTeX commands the platform's renderer knows. Build notation from 
 另外，只用平台能识别的 LaTeX 命令，用标准部件拼出记号（\\operatorname{...}、\\mathrm{...}、\\mathbb{...}、\\mathcal{...}、\\text{...}），不要发明命令（如 \\Ext、\\fp、\\cO、\\PL）；否则命令会以红色报错显示。`
         }
       ]
-    },
-    {
-      title: 'Separate Reasoning and Answer',
-      description: 'For Claude models that mix reasoning-style text with the final answer.',
-      prompts: [
-        {
-          label: 'Copy (English)',
-          text: `Please first output your reasoning process normally. After the reasoning is complete, start a new line and output the following blockquote:
-
-> The above is the reasoning process; the following is the final answer.
-
-After that blockquote, output the final answer.`
-        },
-        {
-          label: 'Copy (中文)',
-          text: `请先正常输出思考过程，思考结束后另起一行输出引用块：
-
-> 以上是思考过程，以下是正式回答
-
-引用块之后再输出最终回答内容。`
-        }
-      ]
     }
   ];
 })();

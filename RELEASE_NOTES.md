@@ -1,4 +1,12 @@
-# ELM Math Fixer v1.4.1
+# ELM Math Fixer v1.4.2
+
+## What's New since v1.4.1
+
+### Fixes
+- **Fixer switch stays in the top bar** (v1.4.2): the switch can no longer be dragged into body content (e.g. a search result list whose links satisfy the old geometric filters). Docking now requires a row carrying a known top bar label; otherwise the switch falls back to the compact floating icon, and a previously misdocked switch heals back automatically.
+
+### Changes
+- **Trimmed prompt catalog** (v1.4.2): removed the "Separate Reasoning and Answer" group. The Fixer Prompts panel now only offers the Math Rendering Fix prompt (English and 中文).
 
 ## What's New since v1.4
 
@@ -12,4 +20,4 @@
 
 ## Install
 
-See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.4.1.zip`.
+See [README](https://github.com/lambdacdm/ELM-Math-Fixer) for installation instructions. The packaged zip is attached below as `ELM-Math-Fixer-v1.4.2.zip`.
